@@ -1,0 +1,6 @@
+python-telegram-bot==20.7
+asyncpg==0.29.0
+redis==5.0.1
+python-dotenv==1.0.0
+duckduckgo-search==6.2.6
+pytz==2024.1
