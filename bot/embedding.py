@@ -3,15 +3,26 @@ import os
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "24h")
+_client = httpx.AsyncClient(
+    timeout=httpx.Timeout(connect=10, read=60, write=30, pool=10),
+    limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
+)
+
+
+async def close_client():
+    await _client.aclose()
+
 
 async def embed_text(text: str) -> list[float]:
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            f"{OLLAMA_URL}/api/embed",
-            json={"model": EMBED_MODEL, "input": text}
-        )
-        resp.raise_for_status()
-        return resp.json()["embeddings"][0]
+    resp = await _client.post(
+        f"{OLLAMA_URL}/api/embed",
+        json={"model": EMBED_MODEL, "input": text, "keep_alive": OLLAMA_KEEP_ALIVE}
+    )
+    resp.raise_for_status()
+    return resp.json()["embeddings"][0]
+
 
 def to_pg_vector(embedding: list[float]) -> str:
+    """Legacy helper — prefer passing lists directly with pgvector registered."""
     return "[" + ",".join(str(x) for x in embedding) + "]"

@@ -25,6 +25,9 @@ services:
       - redis
     restart: unless-stopped
     network_mode: host  # needs host to reach Ollama on localhost:11434
+    volumes:
+      - whisper_cache:/root/.cache/huggingface  # persist whisper model downloads
 
 volumes:
   postgres_data:
+  whisper_cache:

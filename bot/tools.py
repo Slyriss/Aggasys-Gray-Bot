@@ -84,7 +84,6 @@ async def wiki_search(query: str) -> str:
             return "No wiki pages found for that query."
         parts = []
         for r in results:
-            # Include full content so LLM has real knowledge to work with
             parts.append(f"### {r['title']} ({r['path']})\n{r['content']}")
         return "\n\n---\n\n".join(parts)
     except Exception as e:

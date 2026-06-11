@@ -6,13 +6,26 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted  # runs on your VM runner
+    runs-on: self-hosted  # GitHub Actions runner installed on the VM
 
     steps:
       - name: Pull latest code
         run: |
           cd ~/aggasys-bot
           git pull origin main
+
+      - name: Run database migration (idempotent)
+        run: |
+          cd ~/aggasys-bot
+          # Only runs if postgres is already up; safe to run on every deploy
+          docker compose up -d postgres
+          sleep 5
+          docker compose exec -T postgres psql -U aggasys -d aggasys < migration.sql || true
+
+      - name: Pull required Ollama models
+        run: |
+          ollama pull qwen2.5:3b || true
+          ollama pull nomic-embed-text || true
 
       - name: Rebuild and restart bot
         run: |
@@ -21,6 +34,6 @@ jobs:
 
       - name: Health check
         run: |
-          sleep 5
-          docker compose -f ~/aggasys-bot/docker-compose.yml ps bot
-          docker compose -f ~/aggasys-bot/docker-compose.yml logs bot --tail=20
+          sleep 10
+          docker compose -f ~/aggasys-bot/docker-compose.yml ps
+          docker compose -f ~/aggasys-bot/docker-compose.yml logs bot --tail=30
