@@ -1,32 +1,36 @@
 import json
 import logging
 from ollama_client import chat_completion
-from db import save_user_memory, save_company_memory
+from db import save_user_memory, save_company_memory, save_task
 from embedding import embed_text
 
 logger = logging.getLogger(__name__)
 
-EXTRACTOR_PROMPT = """Extract two categories of long-term facts from this conversation exchange.
+EXTRACTOR_PROMPT = """Extract three categories of information from this conversation exchange.
 
-1. USER FACTS: personal info about the speaker — name, role, preferences, ongoing projects, work style.
+1. USER FACTS: personal info about the speaker — name, role, preferences, projects, work style.
 2. COMPANY FACTS: business knowledge useful to the whole company — clients, deals, decisions, contacts, vendors, procedures, pricing.
+3. TASKS: explicit action items, todos, reminders, or follow-ups mentioned (e.g. "I need to call X", "remind me to Y", "follow up with Z by Friday").
 
-Skip: greetings, generic questions, anything trivial or already common knowledge.
+Skip: greetings, generic questions, trivial chat.
 
 Reply ONLY with valid JSON (no markdown, no explanation):
 {
-  "user_facts": ["fact1", "fact2"],
+  "user_facts": ["fact1"],
   "company_facts": [
-    {"fact": "Client ABC prefers evening maintenance windows", "category": "client"},
-    {"fact": "Decided to drop vendor XYZ — pricing 40% above market", "category": "decision"}
+    {"fact": "Client ABC prefers evening maintenance windows", "category": "client"}
+  ],
+  "tasks": [
+    {"content": "Call ABC client about network upgrade", "due_text": "Monday"}
   ]
 }
 
-Valid categories: client, decision, vendor, contact, procedure, project, pricing, general"""
+Valid company categories: client, decision, vendor, contact, procedure, project, pricing, general
+For tasks, due_text is optional — use null if no deadline mentioned."""
 
 
 async def extract_and_save(user_id: int, user_message: str, assistant_reply: str):
-    """Fire-and-forget: extract user + company facts from a turn and persist to DB."""
+    """Fire-and-forget: extract user facts, company facts, and tasks from a conversation turn."""
     try:
         conversation = f"User: {user_message}\nAssistant: {assistant_reply}"
         raw = await chat_completion(
@@ -66,6 +70,15 @@ async def extract_and_save(user_id: int, user_message: str, assistant_reply: str
                     embedding=emb,
                 )
                 logger.info(f"Company fact [{category}]: {fact}")
+
+        for item in data.get("tasks", []):
+            if not isinstance(item, dict):
+                continue
+            content = item.get("content", "").strip()
+            due_text = item.get("due_text") or None
+            if len(content) > 5:
+                await save_task(user_id, content, due_text)
+                logger.info(f"Task extracted [{user_id}]: {content}")
 
     except Exception as e:
         logger.warning(f"Memory extraction failed for {user_id}: {e}")

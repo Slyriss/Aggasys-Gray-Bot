@@ -6,10 +6,13 @@ from ollama_client import chat_completion, stream_completion
 from tools import run_tool, tools_description
 from prompts import SYSTEM_PROMPT
 from context_engine import get_context
+from url_ingester import extract_urls, fetch_url_text
 
 logger = logging.getLogger(__name__)
 ENABLE_LLM_ROUTER = os.getenv("ENABLE_LLM_ROUTER", "0").lower() in {"1", "true", "yes"}
 ENABLE_AUTO_CONTEXT = os.getenv("ENABLE_AUTO_CONTEXT", "1").lower() in {"1", "true", "yes"}
+ENABLE_URL_FETCH = os.getenv("ENABLE_URL_FETCH", "1").lower() in {"1", "true", "yes"}
+MAX_URL_CONTEXT_CHARS = int(os.getenv("MAX_URL_CONTEXT_CHARS", "3000"))
 
 ROUTER_PROMPT = """You are a tool router. Decide if the user message needs a tool.
 
@@ -98,14 +101,44 @@ async def _route(user_message: str) -> tuple:
     return None, {}, ""
 
 
-async def run_agent(user_message: str, history: list, user_memory: list):
+async def _fetch_url_context(user_message: str) -> tuple[str, str]:
     """
-    Orchestrates one turn: optional tool use + auto-context injection + streaming reply.
+    If the message contains URLs, fetch their content.
+    Returns (status_text, context_block).
+    """
+    if not ENABLE_URL_FETCH:
+        return "", ""
+
+    urls = extract_urls(user_message)
+    if not urls:
+        return "", ""
+
+    url = urls[0]  # process first URL only
+    title, text = await fetch_url_text(url)
+    if not text:
+        return "", ""
+
+    truncated = text[:MAX_URL_CONTEXT_CHARS]
+    if len(text) > MAX_URL_CONTEXT_CHARS:
+        truncated += "\n[... content truncated ...]"
+
+    context = f"[Web page: {title}]\nURL: {url}\n\n{truncated}"
+    status = f"🌐 Reading: {title[:60]}..."
+    logger.info(f"URL context fetched: {url} ({len(text)} chars)")
+    return status, context
+
+
+async def run_agent(user_message: str, history: list, user_memory: list,
+                    conversation_summary: str = ""):
+    """
+    Orchestrates one turn: optional tool use + URL fetch + auto-context injection + streaming reply.
     Returns (status_text | None, async_stream_generator).
     """
     tool_name, tool_params, status_text = await _route(user_message)
 
     tool_context = ""
+    url_status = ""
+
     if tool_name:
         try:
             result = await run_tool(tool_name, tool_params)
@@ -114,22 +147,32 @@ async def run_agent(user_message: str, history: list, user_memory: list):
         except Exception as e:
             logger.error(f"Tool {tool_name} failed: {e}")
             status_text = None
+    else:
+        # Try URL fetching (only when no tool triggered)
+        url_status, url_context = await _fetch_url_context(user_message)
+        if url_context:
+            tool_context = f"\n\n{url_context}"
 
-    # Auto-inject relevant wiki + company knowledge on non-tool turns
+    # Auto-inject relevant wiki + company knowledge
     auto_context = ""
     if ENABLE_AUTO_CONTEXT and not tool_name:
         try:
             auto_context = await get_context(user_message)
             if auto_context:
-                auto_context = f"\n\n[Relevant company knowledge — use if applicable]\n{auto_context}"
-                logger.debug(f"Auto-context injected ({len(auto_context)} chars)")
+                auto_context = f"\n\n[Relevant company knowledge]\n{auto_context}"
         except Exception as e:
             logger.warning(f"Context retrieval failed: {e}")
+
+    # Build system prompt — prepend conversation summary if available
+    system = SYSTEM_PROMPT
+    if conversation_summary:
+        system += f"\n\n{conversation_summary}"
 
     messages = history + [{
         "role": "user",
         "content": user_message + tool_context + auto_context,
     }]
 
-    stream = stream_completion(messages, SYSTEM_PROMPT, user_memory, label="reply")
-    return status_text if tool_name else None, stream
+    final_status = url_status or (status_text if tool_name else None)
+    stream = stream_completion(messages, system, user_memory, label="reply")
+    return final_status, stream

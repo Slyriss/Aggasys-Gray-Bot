@@ -22,6 +22,25 @@ CREATE TABLE IF NOT EXISTS company_memory (
 CREATE INDEX IF NOT EXISTS idx_company_memory_embedding ON company_memory USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_company_memory_search ON company_memory USING gin(to_tsvector('english', fact));
 
+-- Rolling conversation summaries
+CREATE TABLE IF NOT EXISTS conversation_summaries (
+    telegram_user_id BIGINT PRIMARY KEY,
+    summary TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Action items and reminders
+CREATE TABLE IF NOT EXISTS tasks (
+    id SERIAL PRIMARY KEY,
+    telegram_user_id BIGINT NOT NULL,
+    content TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    due_text TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    completed_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(telegram_user_id, status, created_at DESC);
+
 -- Quick-capture notes
 CREATE TABLE IF NOT EXISTS notes (
     id SERIAL PRIMARY KEY,
