@@ -3,10 +3,12 @@ name: Deploy to VM
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'DEPLOY_STATUS.md'   # prevents the status-update commit from re-triggering deploy
 
 jobs:
   deploy:
-    runs-on: self-hosted  # GitHub Actions runner installed on the VM
+    runs-on: self-hosted
 
     steps:
       - name: Pull latest code
@@ -17,9 +19,8 @@ jobs:
       - name: Run database migration (idempotent)
         run: |
           cd ~/aggasys-bot
-          # Only runs if postgres is already up; safe to run on every deploy
           docker compose up -d postgres
-          sleep 5
+          sleep 6
           docker compose exec -T postgres psql -U aggasys -d aggasys < migration.sql || true
 
       - name: Pull required Ollama models
@@ -32,8 +33,46 @@ jobs:
           cd ~/aggasys-bot
           docker compose up -d --build bot
 
-      - name: Health check
+      - name: Health check and publish VM status
         run: |
-          sleep 10
-          docker compose -f ~/aggasys-bot/docker-compose.yml ps
-          docker compose -f ~/aggasys-bot/docker-compose.yml logs bot --tail=30
+          cd ~/aggasys-bot
+          sleep 12
+
+          # Collect live VM state — redact credentials
+          {
+            echo "# VM Deploy Status"
+            echo ""
+            echo "**Deployed:** $(date)"
+            echo "**Commit:** $GITHUB_SHA"
+            echo ""
+            echo "## Docker Services"
+            echo '```'
+            docker compose ps
+            echo '```'
+            echo ""
+            echo "## Bot Logs (last 30 lines)"
+            echo '```'
+            docker compose logs bot --tail=30 2>&1 \
+              | sed 's/\(TOKEN\|PASSWORD\|PASS\|SECRET\)[=:][^ ]*/\1=***/gi'
+            echo '```'
+            echo ""
+            echo "## Ollama Models on Host"
+            echo '```'
+            ollama list 2>&1
+            echo '```'
+            echo ""
+            echo "## .env Keys Present (no values)"
+            echo '```'
+            grep -oE '^[A-Z_]+' ~/aggasys-bot/.env 2>/dev/null | sort
+            echo '```'
+          } > DEPLOY_STATUS.md
+
+          # Commit status back to main — paths-ignore above prevents re-trigger
+          git config user.email "runner@aggasys-ai"
+          git config user.name "VM Runner"
+          git add DEPLOY_STATUS.md
+          git diff --staged --quiet || {
+            git commit -m "Update deploy status [skip ci]"
+            git pull --rebase origin main || true
+            git push origin main
+          }
