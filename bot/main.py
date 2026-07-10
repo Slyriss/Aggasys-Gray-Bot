@@ -54,6 +54,9 @@ MEMORY_QUEUE_SIZE = int(os.getenv("MEMORY_QUEUE_SIZE", "100"))
 MEMORY_WORKERS = int(os.getenv("MEMORY_WORKERS", "1"))
 RATE_LIMIT_MESSAGES = int(os.getenv("RATE_LIMIT_MESSAGES", "30"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+MAX_DOCUMENT_BYTES = int(os.getenv("MAX_DOCUMENT_BYTES", "5242880"))
+MAX_VOICE_BYTES = int(os.getenv("MAX_VOICE_BYTES", "10485760"))
+MAX_PHOTO_BYTES = int(os.getenv("MAX_PHOTO_BYTES", "5242880"))
 
 EDIT_INTERVAL = 1.2
 EDIT_MIN_CHARS = 40
@@ -143,6 +146,45 @@ async def _audit_rate_limit(update: Update, retry_after_seconds: int) -> None:
         ),
     )
     await record_decision(decision, status="blocked_rate_limit")
+
+
+def _format_bytes(size: int) -> str:
+    if size >= 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MB"
+    if size >= 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size} bytes"
+
+
+async def _audit_upload_size_denial(update: Update, upload_kind: str, size: int, limit: int) -> None:
+    decision = ActionDecision(
+        status=ActionStatus.DENIED,
+        reason=f"{upload_kind} upload exceeded configured size limit.",
+        action=HermesAction(
+            name=f"upload_too_large:{upload_kind}",
+            description="Rejected a Telegram upload before download because it exceeded the configured limit.",
+            actor_user_id=update.effective_user.id,
+            chat_id=update.effective_chat.id,
+            risk=ActionRisk.READ_ONLY,
+            params={
+                "upload_kind": upload_kind,
+                "size_bytes": size,
+                "limit_bytes": limit,
+            },
+        ),
+    )
+    await record_decision(decision, status="blocked_upload_size")
+
+
+async def _reject_oversize_upload(update: Update, upload_kind: str, size: int | None, limit: int) -> bool:
+    if limit <= 0 or size is None or size <= limit:
+        return False
+    await _audit_upload_size_denial(update, upload_kind, size, limit)
+    await update.message.reply_text(
+        f"That {upload_kind} is too large ({_format_bytes(size)}). "
+        f"Gray accepts up to {_format_bytes(limit)} for {upload_kind} uploads."
+    )
+    return True
 
 
 async def _within_rate_limit(update: Update) -> bool:
@@ -1231,11 +1273,14 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_username, bot_id = _bot_identity(context)
     if not should_process_message(update, bot_username=bot_username, bot_id=bot_id):
         return
+    voice = update.message.voice
+    if await _reject_oversize_upload(update, "voice", getattr(voice, "file_size", None), MAX_VOICE_BYTES):
+        return
     msg = await update.message.reply_text("🎙️ Transcribing...")
     text = None
     try:
         from voice import transcribe
-        voice_file = await update.message.voice.get_file()
+        voice_file = await voice.get_file()
         audio_bytes = bytes(await voice_file.download_as_bytearray())
         text = await transcribe(audio_bytes, mime_type="audio/ogg")
     except Exception as e:
@@ -1264,6 +1309,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     doc = update.message.document
     caption = strip_bot_mention(update.message.caption or "", bot_username)
+    if await _reject_oversize_upload(update, "document", getattr(doc, "file_size", None), MAX_DOCUMENT_BYTES):
+        return
     msg = await update.message.reply_text(f"📄 Processing *{doc.file_name}*...", parse_mode="Markdown")
 
     try:
@@ -1325,12 +1372,14 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    photo = update.message.photo[-1]
+    if await _reject_oversize_upload(update, "photo", getattr(photo, "file_size", None), MAX_PHOTO_BYTES):
+        return
     msg = await update.message.reply_text("🖼️ Analysing image...")
     try:
         import base64
         import httpx
 
-        photo = update.message.photo[-1]
         file = await photo.get_file()
         file_bytes = bytes(await file.download_as_bytearray())
         image_b64 = base64.b64encode(file_bytes).decode()

@@ -84,6 +84,9 @@ REQUIRED_WORKFLOW_MARKERS = [
     "upsert_env HERMES_BACKUP_RETENTION_DAYS 30",
     "upsert_env RATE_LIMIT_MESSAGES 30",
     "upsert_env RATE_LIMIT_WINDOW_SECONDS 60",
+    "upsert_env MAX_DOCUMENT_BYTES 5242880",
+    "upsert_env MAX_VOICE_BYTES 10485760",
+    "upsert_env MAX_PHOTO_BYTES 5242880",
 ]
 
 FORBIDDEN_DEPLOY_MARKERS = [
@@ -172,11 +175,17 @@ def main() -> int:
         errors.append(".env.example missing HERMES_JOB_FAILURE_LIMIT.")
     if "HERMES_BACKUP_RETENTION_DAYS=30" not in env_example:
         errors.append(".env.example missing HERMES_BACKUP_RETENTION_DAYS.")
-    for marker in ("RATE_LIMIT_MESSAGES=30", "RATE_LIMIT_WINDOW_SECONDS=60"):
+    for marker in (
+        "RATE_LIMIT_MESSAGES=30",
+        "RATE_LIMIT_WINDOW_SECONDS=60",
+        "MAX_DOCUMENT_BYTES=5242880",
+        "MAX_VOICE_BYTES=10485760",
+        "MAX_PHOTO_BYTES=5242880",
+    ):
         if marker not in env_example:
-            errors.append(f".env.example missing rate limit marker: {marker}")
+            errors.append(f".env.example missing safety limit marker: {marker}")
     preflight = _read("bot/preflight.py")
-    for marker in ("ALLOWED_USERS", "ADMIN_USERS", "OPERATOR_USERS", "RATE_LIMIT_MESSAGES", "RATE_LIMIT_WINDOW_SECONDS", "HERMES_BACKUP_RETENTION_DAYS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "ZoneInfo"):
+    for marker in ("ALLOWED_USERS", "ADMIN_USERS", "OPERATOR_USERS", "RATE_LIMIT_MESSAGES", "RATE_LIMIT_WINDOW_SECONDS", "MAX_DOCUMENT_BYTES", "MAX_VOICE_BYTES", "MAX_PHOTO_BYTES", "HERMES_BACKUP_RETENTION_DAYS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "ZoneInfo"):
         if marker not in preflight:
             errors.append(f"bot/preflight.py missing strict env marker: {marker}")
     model_client = _read("bot/model_client.py")
@@ -190,6 +199,8 @@ def main() -> int:
         "_audit_rbac_denial", "rbac_denied:", "blocked_rbac",
         "RATE_LIMIT_MESSAGES", "RATE_LIMIT_WINDOW_SECONDS", "_rate_limited",
         "_within_rate_limit", "rate_limited", "blocked_rate_limit",
+        "MAX_DOCUMENT_BYTES", "MAX_VOICE_BYTES", "MAX_PHOTO_BYTES",
+        "_reject_oversize_upload", "upload_too_large:", "blocked_upload_size",
         "Restricted to Gray admins", "Restricted to Gray operators",
     ):
         if marker not in main_py:

@@ -288,5 +288,61 @@ class RateLimitTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(update.message.replies, [])
 
 
+class UploadLimitTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.role_patchers = [
+            patch.object(bot_main, "ALLOWED_USERS", {123}),
+            patch.object(bot_main, "MAX_DOCUMENT_BYTES", 100),
+            patch.object(bot_main, "MAX_VOICE_BYTES", 100),
+            patch.object(bot_main, "MAX_PHOTO_BYTES", 100),
+        ]
+        for patcher in self.role_patchers:
+            patcher.start()
+
+    async def asyncTearDown(self):
+        for patcher in reversed(self.role_patchers):
+            patcher.stop()
+
+    async def test_oversize_upload_is_rejected_and_audited(self):
+        update = fake_update(user_id=123)
+
+        with patch.object(bot_main, "record_decision", AsyncMock()) as record:
+            rejected = await bot_main._reject_oversize_upload(update, "voice", 101, 100)
+
+        self.assertTrue(rejected)
+        record.assert_awaited_once()
+        decision = record.await_args.args[0]
+        self.assertEqual(decision.action.name, "upload_too_large:voice")
+        self.assertEqual(record.await_args.kwargs["status"], "blocked_upload_size")
+        self.assertIn("too large", update.message.replies[0]["text"])
+
+    async def test_unknown_upload_size_is_allowed_through(self):
+        update = fake_update(user_id=123)
+
+        with patch.object(bot_main, "record_decision", AsyncMock()) as record:
+            rejected = await bot_main._reject_oversize_upload(update, "photo", None, 100)
+
+        self.assertFalse(rejected)
+        record.assert_not_awaited()
+        self.assertEqual(update.message.replies, [])
+
+    async def test_oversize_document_does_not_download(self):
+        update = fake_update(user_id=123)
+        update.message.caption = ""
+        update.message.document = SimpleNamespace(
+            file_name="large.pdf",
+            file_size=101,
+            get_file=AsyncMock(),
+        )
+        context = SimpleNamespace()
+
+        with patch.object(bot_main, "should_process_message", return_value=True), \
+             patch.object(bot_main, "record_decision", AsyncMock()):
+            await bot_main.handle_document(update, context)
+
+        update.message.document.get_file.assert_not_awaited()
+        self.assertIn("document is too large", update.message.replies[0]["text"])
+
+
 if __name__ == "__main__":
     unittest.main()

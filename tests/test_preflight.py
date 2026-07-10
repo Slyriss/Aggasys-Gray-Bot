@@ -34,6 +34,9 @@ VALID_ENV = {
     "GRAY_BOT_USERNAME": "GrayBot",
     "RATE_LIMIT_MESSAGES": "30",
     "RATE_LIMIT_WINDOW_SECONDS": "60",
+    "MAX_DOCUMENT_BYTES": "5242880",
+    "MAX_VOICE_BYTES": "10485760",
+    "MAX_PHOTO_BYTES": "5242880",
     "HERMES_BACKUP_RETENTION_DAYS": "30",
 }
 
@@ -159,6 +162,19 @@ class PreflightTests(unittest.TestCase):
 
         self.assertFalse(report.ok)
         self.assertIn("HERMES_BACKUP_RETENTION_DAYS must be a positive integer.", report.errors)
+
+    def test_bad_upload_limit_values_fail(self):
+        env = dict(VALID_ENV)
+        env["MAX_DOCUMENT_BYTES"] = "0"
+        env["MAX_VOICE_BYTES"] = "-1"
+        env["MAX_PHOTO_BYTES"] = "big"
+
+        report = collect_preflight_report(env)
+
+        self.assertFalse(report.ok)
+        self.assertIn("MAX_DOCUMENT_BYTES must be a positive integer.", report.errors)
+        self.assertIn("MAX_VOICE_BYTES must be a positive integer.", report.errors)
+        self.assertIn("MAX_PHOTO_BYTES must be a positive integer.", report.errors)
 
     def test_bad_timezone_fails(self):
         env = dict(VALID_ENV)

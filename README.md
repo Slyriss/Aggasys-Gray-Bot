@@ -137,6 +137,9 @@ container startup, and post-deploy health checks.
 - `RATE_LIMIT_MESSAGES` and `RATE_LIMIT_WINDOW_SECONDS` cap allowed-user traffic
   before model/database work starts. Rate-limit denials are written to Hermes
   audit as `rate_limited` with status `blocked_rate_limit`.
+- `MAX_DOCUMENT_BYTES`, `MAX_VOICE_BYTES`, and `MAX_PHOTO_BYTES` reject large
+  Telegram uploads before download/model work. Oversize denials are written to
+  Hermes audit as `upload_too_large:<kind>` with status `blocked_upload_size`.
 
 ## Current Limits
 

@@ -94,6 +94,9 @@ Minimum required keys:
 - `GRAY_BOT_USERNAME`
 - `RATE_LIMIT_MESSAGES`
 - `RATE_LIMIT_WINDOW_SECONDS`
+- `MAX_DOCUMENT_BYTES`
+- `MAX_VOICE_BYTES`
+- `MAX_PHOTO_BYTES`
 
 `DB_PASS` must match the password embedded in `DATABASE_URL`. URL-encode special
 characters in `DATABASE_URL` if your generated password contains symbols.
@@ -102,6 +105,8 @@ failures; default is `3`. Auto-pauses are written to Hermes audit as
 `scheduled_job_auto_paused`.
 Hermes operational backups are pruned by `HERMES_BACKUP_RETENTION_DAYS`;
 default is `30`.
+Telegram documents, voice notes, and photos are rejected before download if they
+exceed `MAX_DOCUMENT_BYTES`, `MAX_VOICE_BYTES`, or `MAX_PHOTO_BYTES`.
 
 ## Model Backend
 
