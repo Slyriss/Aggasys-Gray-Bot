@@ -9,6 +9,7 @@ CHECKS = [
     [sys.executable, "-m", "compileall", "-q", "bot", "tests", "scripts"],
     [sys.executable, "scripts/scan_secret_hygiene.py"],
     [sys.executable, "scripts/runtime_import_smoke.py"],
+    [sys.executable, "scripts/verify_deploy_status.py"],
     [sys.executable, "scripts/verify_deployment_assets.py"],
     [sys.executable, "scripts/verify_runtime_assets.py"],
     [sys.executable, "scripts/verify_schema_assets.py"],

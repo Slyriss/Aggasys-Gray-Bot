@@ -30,6 +30,7 @@ REQUIRED_FILES = [
     "scripts/scan_secret_hygiene.py",
     "scripts/docker_build_smoke.py",
     "scripts/runtime_import_smoke.py",
+    "scripts/verify_deploy_status.py",
     "scripts/verify_runtime_assets.py",
     "scripts/verify_schema_assets.py",
     "scripts/verify_policy_registry.py",
@@ -77,6 +78,7 @@ REQUIRED_WORKFLOW_MARKERS = [
     "bash scripts/backup_hermes_data.sh backups",
     "docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U aggasys -d aggasys < migration.sql",
     "bash scripts/check_post_deploy_health.sh",
+    "python3 scripts/verify_deploy_status.py DEPLOY_STATUS.md",
 ]
 
 FORBIDDEN_DEPLOY_MARKERS = [
@@ -279,6 +281,12 @@ def main() -> int:
     run_checks = _read("scripts/run_checks.py")
     if "scripts/scan_secret_hygiene.py" not in run_checks:
         errors.append("scripts/run_checks.py must run the secret hygiene scanner.")
+    if "scripts/verify_deploy_status.py" not in run_checks:
+        errors.append("scripts/run_checks.py must verify the deploy status artifact.")
+    deploy_status = _read("scripts/verify_deploy_status.py")
+    for marker in ("TELEGRAM_TOKEN_RE", "RUNTIME_FAILURE_MARKERS", "REQUIRED_HEALTH_MARKERS", "Deploy status verification OK"):
+        if marker not in deploy_status:
+            errors.append(f"scripts/verify_deploy_status.py missing marker: {marker}")
     import_smoke = _read("scripts/runtime_import_smoke.py")
     for marker in ("CORE_RUNTIME_IMPORTS", "HEAVY_RUNTIME_IMPORTS", "importlib.import_module", "Runtime import smoke OK"):
         if marker not in import_smoke:

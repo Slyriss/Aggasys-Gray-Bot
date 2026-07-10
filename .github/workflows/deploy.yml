@@ -167,6 +167,7 @@ jobs:
             bash scripts/check_post_deploy_health.sh 2>&1
             echo '```'
           } > DEPLOY_STATUS.md
+          python3 scripts/verify_deploy_status.py DEPLOY_STATUS.md
 
           # Commit status back to main — paths-ignore above prevents re-trigger
           git config user.email "runner@aggasys-ai"
