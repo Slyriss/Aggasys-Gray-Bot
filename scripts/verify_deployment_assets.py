@@ -95,6 +95,7 @@ FORBIDDEN_DEPLOY_MARKERS = [
 ]
 
 REQUIRED_COMMAND_MARKERS = [
+    "ops_status",
     "standup_chase_schedule",
     "monitor_schedule",
     "schedule_pause",
@@ -201,6 +202,7 @@ def main() -> int:
         "_within_rate_limit", "rate_limited", "blocked_rate_limit",
         "MAX_DOCUMENT_BYTES", "MAX_VOICE_BYTES", "MAX_PHOTO_BYTES",
         "_reject_oversize_upload", "upload_too_large:", "blocked_upload_size",
+        "ops_status_cmd", "DeepSeek key: `{_configured_state",
         "Restricted to Gray admins", "Restricted to Gray operators",
     ):
         if marker not in main_py:
@@ -218,7 +220,7 @@ def main() -> int:
         if marker not in scheduler:
             errors.append(f"bot/hermes/scheduler.py missing auto-pause audit marker: {marker}")
     policy = _read("bot/hermes/policy.py")
-    for marker in ("READ_ONLY_ACTIONS", "INTERNAL_WORKFLOW_ACTIONS", "CONFIRMATION_REQUIRED", "Unknown Hermes action"):
+    for marker in ("READ_ONLY_ACTIONS", "INTERNAL_WORKFLOW_ACTIONS", "CONFIRMATION_REQUIRED", "Unknown Hermes action", "ops_status"):
         if marker not in policy:
             errors.append(f"bot/hermes/policy.py missing registry marker: {marker}")
     agent = _read("bot/agent.py")
@@ -233,6 +235,7 @@ def main() -> int:
     smoke = _read("docs/TELEGRAM_SMOKE_TEST.md")
     for marker in (
         "/hermes_status",
+        "/ops_status",
         "/standup_schedule",
         "/standup_chase_schedule",
         "/monitor_schedule",
@@ -271,6 +274,7 @@ def main() -> int:
         "python scripts/release_readiness.py --include-heavy --include-docker",
         "The best time to deploy",
         "docs/TELEGRAM_SMOKE_TEST.md",
+        "/ops_status",
         "Supply ordering is intentionally not implemented yet",
     ):
         if marker not in readme:

@@ -210,6 +210,7 @@ In Telegram:
 
 - `/start`
 - `/hermes_status`
+- `/ops_status`
 - `/standup_schedule 09:30 Alice, Bob`
 - `/standup_chase_schedule 09:50`
 - `/monitor_schedule 10:00 Singapore SME AI tenders`
@@ -225,6 +226,8 @@ Expected:
 - `bash scripts/check_post_deploy_health.sh` reports `Post-deploy health check OK`.
 - `docker compose ps` shows Postgres and Redis as healthy.
 - `/hermes_status` shows scheduler `running`.
+- `/ops_status` shows redacted model, role, rate-limit, upload-limit, backup,
+  scheduler, and approval state without exposing tokens or API keys.
 - `/schedules` shows the daily standup, chase, and monitor jobs.
 - `/standup_chase` reminds only missing participants when a standup is open.
 - The monitor posts read-only web search results at the scheduled time.

@@ -14,6 +14,7 @@ SMOKE_REQUIRED_COMMANDS = {
     "hermes",
     "hermes_status",
     "monitor_schedule",
+    "ops_status",
     "schedule_pause",
     "schedule_resume",
     "schedule_remove",

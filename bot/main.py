@@ -359,6 +359,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/schedule_remove <id> — remove a Hermes schedule\n"
         "/hermes — show recent Hermes audit entries\n"
         "/hermes_status — show Hermes scheduler health\n"
+        "/ops_status — show admin runtime and safety status\n"
         "/approvals — show pending Hermes approvals\n"
         "/approve <id> — approve a pending Hermes action\n"
         "/deny <id> [reason] — deny a pending Hermes action\n"
@@ -721,6 +722,56 @@ async def hermes_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     next_run = health["next_run_at"].strftime("%d %b %H:%M") if health.get("next_run_at") else "none"
     lines = [
         "*Hermes status:*",
+        f"Scheduler: `{scheduler_state}`",
+        f"Active jobs: `{health['active_jobs']}`",
+        f"Paused jobs: `{health['paused_jobs']}`",
+        f"Due jobs: `{health['due_jobs']}`",
+        f"Errored jobs: `{health['errored_jobs']}`",
+        f"Next run: `{next_run}`",
+        f"Pending approvals: `{approvals['pending']}`",
+        f"Expired approvals: `{approvals['expired']}`",
+    ]
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+def _configured_state(value: str | None) -> str:
+    return "set" if value else "unset"
+
+
+async def ops_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_admin(update):
+        return
+    await _decide_and_audit(
+        update,
+        "ops_status",
+        "Read redacted operational runtime and safety status.",
+        ActionRisk.READ_ONLY,
+    )
+    health = await get_hermes_scheduler_health()
+    approvals = await get_hermes_approval_counts(update.effective_chat.id)
+    scheduler_state = "running" if _hermes_scheduler and _hermes_scheduler.is_running else "stopped"
+    next_run = health["next_run_at"].strftime("%d %b %H:%M") if health.get("next_run_at") else "none"
+    model_provider = os.getenv("MODEL_PROVIDER", "deepseek")
+    embedding_provider = os.getenv("EMBEDDING_PROVIDER", "disabled")
+    lines = [
+        "*Gray ops status:*",
+        f"Model provider: `{model_provider}`",
+        f"DeepSeek key: `{_configured_state(os.getenv('DEEPSEEK_API_KEY'))}`",
+        f"DeepSeek model: `{os.getenv('DEEPSEEK_MODEL', 'deepseek-v4-flash')}`",
+        f"Embedding provider: `{embedding_provider}`",
+        f"Vision model: `{_configured_state(os.getenv('VISION_MODEL'))}`",
+        f"Group mode: `{os.getenv('HERMES_GROUP_CHAT_MODE', 'mention')}`",
+        f"Bot username: `{os.getenv('GRAY_BOT_USERNAME', 'unset')}`",
+        f"Allowed users: `{len(ALLOWED_USERS)}`",
+        f"Admins: `{len(ADMIN_USERS)}`",
+        f"Operators: `{len(OPERATOR_USERS)}`",
+        f"Rate limit: `{RATE_LIMIT_MESSAGES}/{RATE_LIMIT_WINDOW_SECONDS}s`",
+        f"Upload caps: `doc={_format_bytes(MAX_DOCUMENT_BYTES)}, voice={_format_bytes(MAX_VOICE_BYTES)}, photo={_format_bytes(MAX_PHOTO_BYTES)}`",
+        f"Memory workers: `{MEMORY_WORKERS}`",
+        f"Memory queue: `{MEMORY_QUEUE_SIZE}`",
+        f"Backup retention days: `{os.getenv('HERMES_BACKUP_RETENTION_DAYS', 'unset')}`",
         f"Scheduler: `{scheduler_state}`",
         f"Active jobs: `{health['active_jobs']}`",
         f"Paused jobs: `{health['paused_jobs']}`",
@@ -1441,6 +1492,7 @@ def main():
     app.add_handler(CommandHandler("brief", _rate_limited(brief_cmd)))
     app.add_handler(CommandHandler("hermes", _rate_limited(hermes_cmd)))
     app.add_handler(CommandHandler("hermes_status", _rate_limited(hermes_status_cmd)))
+    app.add_handler(CommandHandler("ops_status", _rate_limited(ops_status_cmd)))
     app.add_handler(CommandHandler("approvals", _rate_limited(approvals_cmd)))
     app.add_handler(CommandHandler("approve", _rate_limited(approve_cmd)))
     app.add_handler(CommandHandler("deny", _rate_limited(deny_cmd)))

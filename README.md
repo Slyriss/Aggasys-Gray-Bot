@@ -134,6 +134,8 @@ container startup, and post-deploy health checks.
 - `ADMIN_USERS` can approve/deny Hermes requests, manage schedules, run web
   monitoring, and change wiki knowledge. Admins automatically count as
   operators.
+- `/ops_status` gives admins a redacted runtime view of model, role, rate-limit,
+  upload-limit, backup, scheduler, and approval state without exposing secrets.
 - `RATE_LIMIT_MESSAGES` and `RATE_LIMIT_WINDOW_SECONDS` cap allowed-user traffic
   before model/database work starts. Rate-limit denials are written to Hermes
   audit as `rate_limited` with status `blocked_rate_limit`.

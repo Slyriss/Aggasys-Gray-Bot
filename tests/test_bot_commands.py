@@ -222,6 +222,57 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(record.await_args.kwargs["status"], "blocked_rbac")
         self.assertEqual(update.message.replies[0]["text"], "Restricted to Gray admins.")
 
+    async def test_ops_status_requires_admin_role(self):
+        update = fake_update(user_id=456)
+        context = SimpleNamespace()
+
+        with patch.object(bot_main, "get_hermes_scheduler_health", AsyncMock()) as health, \
+             patch.object(bot_main, "record_decision", AsyncMock()) as record:
+            await bot_main.ops_status_cmd(update, context)
+
+        health.assert_not_awaited()
+        record.assert_awaited_once()
+        decision = record.await_args.args[0]
+        self.assertEqual(decision.action.name, "rbac_denied:admin")
+        self.assertEqual(record.await_args.kwargs["status"], "blocked_rbac")
+        self.assertEqual(update.message.replies[0]["text"], "Restricted to Gray admins.")
+
+    async def test_ops_status_reports_redacted_runtime_state(self):
+        update = fake_update(user_id=123)
+        context = SimpleNamespace()
+        health = {
+            "active_jobs": 2,
+            "paused_jobs": 1,
+            "due_jobs": 0,
+            "errored_jobs": 1,
+            "next_run_at": datetime(2026, 7, 10, 9, 30),
+        }
+        approvals = {"pending": 3, "expired": 4}
+
+        with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())) as audit, \
+             patch.object(bot_main, "get_hermes_scheduler_health", AsyncMock(return_value=health)), \
+             patch.object(bot_main, "get_hermes_approval_counts", AsyncMock(return_value=approvals)), \
+             patch.object(bot_main, "_hermes_scheduler", SimpleNamespace(is_running=True)), \
+             patch.dict(os.environ, {
+                 "MODEL_PROVIDER": "deepseek",
+                 "DEEPSEEK_API_KEY": "sk-secret-value-that-must-not-leak",
+                 "DEEPSEEK_MODEL": "deepseek-v4-flash",
+                 "EMBEDDING_PROVIDER": "disabled",
+                 "HERMES_GROUP_CHAT_MODE": "mention",
+                 "GRAY_BOT_USERNAME": "GrayBot",
+                 "HERMES_BACKUP_RETENTION_DAYS": "30",
+             }, clear=False):
+            await bot_main.ops_status_cmd(update, context)
+
+        audit.assert_awaited_once()
+        reply = update.message.replies[0]["text"]
+        self.assertIn("*Gray ops status:*", reply)
+        self.assertIn("DeepSeek key: `set`", reply)
+        self.assertIn("Upload caps:", reply)
+        self.assertIn("Scheduler: `running`", reply)
+        self.assertIn("Pending approvals: `3`", reply)
+        self.assertNotIn("sk-secret-value-that-must-not-leak", reply)
+
 
 class RateLimitTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

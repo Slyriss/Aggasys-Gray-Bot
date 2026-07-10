@@ -16,6 +16,7 @@ class HermesPolicy:
         "wiki_search",
         "standup_status",
         "daily_brief",
+        "ops_status",
     }
 
     INTERNAL_WORKFLOW_ACTIONS = {

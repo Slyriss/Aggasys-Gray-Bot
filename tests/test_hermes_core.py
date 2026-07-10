@@ -37,6 +37,18 @@ class HermesPolicyTests(unittest.TestCase):
         self.assertEqual(decision.status, ActionStatus.ALLOWED)
         self.assertTrue(decision.allowed)
 
+    def test_ops_status_is_registered_read_only(self):
+        action = HermesAction(
+            name="ops_status",
+            description="Read redacted runtime status.",
+            risk=ActionRisk.READ_ONLY,
+        )
+
+        decision = HermesPolicy().decide(action)
+
+        self.assertEqual(decision.status, ActionStatus.ALLOWED)
+        self.assertTrue(decision.allowed)
+
     def test_medium_risk_action_requires_confirmation(self):
         action = HermesAction(
             name="place_order",

@@ -25,6 +25,7 @@ Send these to Gray in a private chat:
 ```text
 /start
 /hermes_status
+/ops_status
 /note smoke test note
 /recall smoke test note
 /task smoke test task
@@ -36,6 +37,8 @@ Expected:
 
 - `/start` returns the command list.
 - `/hermes_status` shows scheduler `running`.
+- `/ops_status` shows redacted model, role, rate-limit, upload-limit, backup,
+  scheduler, and approval state without showing API keys or tokens.
 - Note, recall, task, tasks, and brief all answer without errors.
 
 ## Standup Workflow
