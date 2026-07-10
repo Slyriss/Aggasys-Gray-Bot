@@ -1,14 +1,14 @@
 # VM Deploy Status
 
-**Deployed:** Fri Jul 10 04:27:13 AM UTC 2026
-**Commit:** 5166e09e8b348ac9ba326ef1aea9dae9e6d89568
+**Deployed:** Fri Jul 10 04:32:17 AM UTC 2026
+**Commit:** d0f99d96218a94bbd0dfba691f707d5a432c2791
 
 ## Docker Services
 ```
 NAME                     IMAGE                    COMMAND                  SERVICE    CREATED          STATUS                    PORTS
 aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        18 seconds ago   Up 16 seconds             
-aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   38 minutes ago   Up 38 minutes (healthy)   5432/tcp
-aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      31 minutes ago   Up 31 minutes (healthy)   6379/tcp
+aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   43 minutes ago   Up 43 minutes (healthy)   5432/tcp
+aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      36 minutes ago   Up 36 minutes (healthy)   6379/tcp
 ```
 
 ## Bot Logs (last 30 lines)
@@ -20,6 +20,7 @@ bot-1  | INFO:hermes.scheduler:Hermes scheduler started interval=30s
 bot-1  | INFO:__main__:Memory queue started workers=1
 bot-1  | INFO:__main__:Allowlist active: {1143441908}
 bot-1  | INFO:__main__:Admin role active: {1143441908}
+bot-1  | INFO:__main__:Rate limit active: 30 messages per 60s
 bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/deleteWebhook "HTTP/1.1 200 OK"
 bot-1  | INFO:telegram.ext.Application:Application started
 bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/getUpdates "HTTP/1.1 200 OK"
@@ -50,15 +51,17 @@ HERMES_TIMEZONE
 MODEL_PROVIDER
 OLLAMA_MODEL
 OLLAMA_URL
+RATE_LIMIT_MESSAGES
+RATE_LIMIT_WINDOW_SECONDS
 REDIS_URL
 TELEGRAM_TOKEN
 ```
 
 ## Gray/Hermes Verification Gates
 ```
-............................................................................................................
+.................................................................................................................
 ----------------------------------------------------------------------
-Ran 108 tests in 0.458s
+Ran 113 tests in 0.500s
 
 OK
 Command surface verification OK
