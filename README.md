@@ -139,6 +139,9 @@ container startup, and post-deploy health checks.
 - Unhandled Telegram handler failures are caught by a global error boundary,
   replied to generically, and audited as `telegram_handler_error` with status
   `handler_error` without storing exception text.
+- URL reading rejects localhost, private/link-local IPs, unsafe DNS resolutions,
+  private redirects, oversized responses, and non-HTTP(S) schemes before content
+  is injected into Gray's context.
 - `RATE_LIMIT_MESSAGES` and `RATE_LIMIT_WINDOW_SECONDS` cap allowed-user traffic
   before model/database work starts. Rate-limit denials are written to Hermes
   audit as `rate_limited` with status `blocked_rate_limit`.

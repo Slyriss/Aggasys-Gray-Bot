@@ -232,6 +232,19 @@ def main() -> int:
     for marker in ("Hermes operating guardrails", "explicit approval through Hermes", "Supply ordering is intentionally not implemented yet"):
         if marker not in prompts:
             errors.append(f"bot/prompts.py missing Hermes system guardrail marker: {marker}")
+    url_ingester = _read("bot/url_ingester.py")
+    for marker in (
+        "is_safe_fetch_url",
+        "ipaddress.ip_address",
+        "socket.getaddrinfo",
+        "is_private",
+        "is_loopback",
+        "MAX_URL_REDIRECTS",
+        "MAX_URL_BYTES",
+        "follow_redirects=False",
+    ):
+        if marker not in url_ingester:
+            errors.append(f"bot/url_ingester.py missing URL safety marker: {marker}")
 
     smoke = _read("docs/TELEGRAM_SMOKE_TEST.md")
     for marker in (
@@ -277,6 +290,7 @@ def main() -> int:
         "docs/TELEGRAM_SMOKE_TEST.md",
         "/ops_status",
         "telegram_handler_error",
+        "URL reading rejects localhost",
         "Supply ordering is intentionally not implemented yet",
     ):
         if marker not in readme:
