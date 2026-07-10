@@ -108,6 +108,8 @@ def main() -> int:
             errors.append(f".gitignore missing marker: {marker}")
     if ".venv/" not in gitignore:
         errors.append(".gitignore missing marker: .venv/")
+    if ".venv-deploy/" not in gitignore:
+        errors.append(".gitignore missing marker: .venv-deploy/")
 
     migration = _read("migration.sql")
     for marker in REQUIRED_MIGRATION_MARKERS:
@@ -290,6 +292,8 @@ def main() -> int:
         errors.append(".github/workflows/deploy.yml must skip deploy status verification while generating DEPLOY_STATUS.md.")
     if "git restore --staged --worktree DEPLOY_STATUS.md" not in workflow:
         errors.append(".github/workflows/deploy.yml must clean only generated deploy status before pulling.")
+    if "rm -rf .venv-deploy" not in workflow:
+        errors.append(".github/workflows/deploy.yml must clean generated deploy virtualenv before pulling.")
     deploy_status = _read("scripts/verify_deploy_status.py")
     for marker in ("TELEGRAM_TOKEN_RE", "RUNTIME_FAILURE_MARKERS", "REQUIRED_HEALTH_MARKERS", "Deploy status verification OK"):
         if marker not in deploy_status:
