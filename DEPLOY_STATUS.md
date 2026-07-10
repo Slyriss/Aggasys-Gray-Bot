@@ -1,12 +1,12 @@
 # VM Deploy Status
 
-**Deployed:** Fri Jul 10 06:00:43 AM UTC 2026
-**Commit:** 1209015aa7e706211496204f40fd647078cc7285
+**Deployed:** Fri Jul 10 06:04:29 AM UTC 2026
+**Commit:** 501b36b00975363c6c10ae91521415c2640b161a
 
 ## Docker Services
 ```
 NAME                     IMAGE                    COMMAND                  SERVICE    CREATED          STATUS                 PORTS
-aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        25 seconds ago   Up 19 seconds          
+aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        22 seconds ago   Up 19 seconds          
 aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   2 hours ago      Up 2 hours (healthy)   5432/tcp
 aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      2 hours ago      Up 2 hours (healthy)   6379/tcp
 ```
@@ -18,8 +18,8 @@ bot-1  | INFO:__main__:Aggasys second brain starting...
 bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/getMe "HTTP/1.1 200 OK"
 bot-1  | INFO:hermes.scheduler:Hermes scheduler started interval=30s
 bot-1  | INFO:__main__:Memory queue started workers=1
-bot-1  | INFO:__main__:Allowlist active: {1143441908}
-bot-1  | INFO:__main__:Admin role active: {1143441908}
+bot-1  | INFO:__main__:Allowlist active: 1 user(s)
+bot-1  | INFO:__main__:Admin role active: 1 user(s)
 bot-1  | INFO:__main__:Rate limit active: 30 messages per 60s
 bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/deleteWebhook "HTTP/1.1 200 OK"
 bot-1  | INFO:telegram.ext.Application:Application started
@@ -67,11 +67,11 @@ TELEGRAM_TOKEN
 ```
 .........WARNING:main:Telegram Markdown rejected; retrying message as plain text.
 ..........WARNING:main:Telegram Markdown rejected; retrying message as plain text.
-..................................................................................................................................INFO:url_ingester:Blocking URL host internal.example.com resolved to non-public address 192.168.1.10
+...................................................................................................................................INFO:url_ingester:Blocking URL host internal.example.com resolved to non-public address 192.168.1.10
 ..INFO:url_ingester:Blocked unsafe URL redirect target: http://127.0.0.1/admin
 ..
 ----------------------------------------------------------------------
-Ran 153 tests in 0.598s
+Ran 154 tests in 0.967s
 
 OK
 Command surface verification OK
