@@ -60,7 +60,7 @@ jobs:
           bash scripts/check_vps_prereqs.sh --skip-models
           python3 bot/preflight.py --env-file .env
           python3 -m pip install --user -r bot/requirements.txt
-          python3 scripts/run_checks.py
+          ALLOW_WORKSPACE_ENV=1 python3 scripts/run_checks.py
           docker compose config >/dev/null
 
       - name: Run database migration (idempotent)
@@ -148,7 +148,7 @@ jobs:
             echo ""
             echo "## Gray/Hermes Verification Gates"
             echo '```'
-            python3 scripts/run_checks.py 2>&1
+            ALLOW_WORKSPACE_ENV=1 python3 scripts/run_checks.py 2>&1
             echo '```'
             echo ""
             echo "## Gray/Hermes Preflight"

@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -43,6 +44,16 @@ class SecretHygieneTests(unittest.TestCase):
             findings = scan_repository(root)
 
             self.assertTrue(any("Real .env file" in finding.message for finding in findings))
+
+    def test_allows_env_file_only_when_deploy_override_is_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".env").write_text("TELEGRAM_TOKEN=123456789:replace_with_bot_token\n", encoding="utf-8")
+
+            with patch.dict(os.environ, {"ALLOW_WORKSPACE_ENV": "1"}):
+                findings = scan_repository(root)
+
+            self.assertFalse(any("Real .env file" in finding.message for finding in findings))
 
     def test_rejects_real_telegram_token(self):
         with tempfile.TemporaryDirectory() as tmp:
