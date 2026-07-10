@@ -1,6 +1,7 @@
 import httpx
 import os
 
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "disabled").strip().lower()
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
 OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "24h")
@@ -15,6 +16,10 @@ async def close_client():
 
 
 async def embed_text(text: str) -> list[float]:
+    if EMBEDDING_PROVIDER == "disabled":
+        raise RuntimeError("Embeddings are disabled by EMBEDDING_PROVIDER=disabled.")
+    if EMBEDDING_PROVIDER != "ollama":
+        raise RuntimeError(f"Unsupported EMBEDDING_PROVIDER={EMBEDDING_PROVIDER}.")
     resp = await _client.post(
         f"{OLLAMA_URL}/api/embed",
         json={"model": EMBED_MODEL, "input": text, "keep_alive": OLLAMA_KEEP_ALIVE}

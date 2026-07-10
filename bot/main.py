@@ -15,13 +15,32 @@ from db import (
     save_note, get_recent_notes, search_notes,
     save_task, get_open_tasks, complete_task, get_all_tasks,
     get_conversation_count, SUMMARY_TRIGGER_MESSAGES,
+    create_standup_session, get_open_standup_session, save_standup_update,
+    close_standup_session, get_recent_hermes_audit,
+    get_pending_hermes_approvals, resolve_hermes_approval,
+    create_hermes_job, get_hermes_jobs, pause_hermes_job, remove_hermes_job,
+    resume_hermes_job,
+    get_hermes_approval, get_hermes_approval_counts, get_hermes_scheduler_health,
 )
 from memory_extractor import extract_and_save
 from summarizer import maybe_summarize, get_summary_context
-from ollama_client import close_client as close_ollama_client
+from model_client import close_client as close_model_client
 from embedding import close_client as close_embedding_client, embed_text
 from wiki import list_pages, ingest_document, lint_wiki, search_wiki
 from db import semantic_search_company_memory, text_search_company_memory
+from hermes import ActionRisk, HermesAction, HermesPolicy
+from hermes.audit import record_decision
+from hermes.approvals import approval_summary, create_approval_from_decision
+from hermes.chat_policy import should_process_message, strip_bot_mention
+from hermes.scheduler import HermesScheduler, next_daily_run, parse_daily_time
+from hermes.workflows import (
+    looks_like_standup_update,
+    missing_standup_participants,
+    parse_participants,
+    standup_chase_message,
+    summarize_standup_updates,
+)
+from preflight import collect_preflight_report, render_report
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -42,10 +61,19 @@ ALLOWED_USERS: set[int] = {
 
 _memory_queue = None
 _memory_workers = []
+_hermes_policy = HermesPolicy()
+_hermes_scheduler = None
 
 
 def _is_allowed(user_id: int) -> bool:
     return not ALLOWED_USERS or user_id in ALLOWED_USERS
+
+
+def _bot_identity(context: ContextTypes.DEFAULT_TYPE) -> tuple[str | None, int | None]:
+    bot = getattr(context, "bot", None)
+    username = os.getenv("GRAY_BOT_USERNAME") or getattr(bot, "username", None)
+    bot_id = getattr(bot, "id", None)
+    return username, bot_id
 
 
 async def _memory_worker():
@@ -61,12 +89,14 @@ async def _memory_worker():
 
 
 async def post_init(app):
-    global _memory_queue, _memory_workers
+    global _memory_queue, _memory_workers, _hermes_scheduler
     _memory_queue = asyncio.Queue(maxsize=MEMORY_QUEUE_SIZE)
     _memory_workers = [
         asyncio.create_task(_memory_worker())
         for _ in range(MEMORY_WORKERS)
     ]
+    _hermes_scheduler = HermesScheduler(app)
+    _hermes_scheduler.start()
     logger.info("Memory queue started workers=%s", MEMORY_WORKERS)
     if ALLOWED_USERS:
         logger.info("Allowlist active: %s", ALLOWED_USERS)
@@ -75,11 +105,15 @@ async def post_init(app):
 
 
 async def post_shutdown(app):
+    global _hermes_scheduler
+    if _hermes_scheduler:
+        await _hermes_scheduler.stop()
+        _hermes_scheduler = None
     for task in _memory_workers:
         task.cancel()
     if _memory_workers:
         await asyncio.gather(*_memory_workers, return_exceptions=True)
-    await close_ollama_client()
+    await close_model_client()
     await close_embedding_client()
 
 
@@ -145,10 +179,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Transcribe voice notes and ingest documents\n"
         "• Fetch and reason over web pages you share\n\n"
         "*Commands:*\n"
+        "/start — show this message\n"
         "/task <text> — add a task or reminder\n"
         "/tasks — show open tasks\n"
         "/done <id> — mark a task complete\n"
         "/brief — morning briefing: tasks, notes, recent learning\n"
+        "/standup_start <names> — open a Hermes standup workflow\n"
+        "/standup_update <text> — add your standup update\n"
+        "/standup_status — show standup progress\n"
+        "/standup_chase — remind missing standup participants\n"
+        "/standup_close — close and summarize standup\n"
+        "/standup_schedule <HH:MM> <names> — schedule daily standup prompt\n"
+        "/standup_chase_schedule <HH:MM> — schedule daily standup chasing\n"
+        "/monitor_schedule <HH:MM> <query> — schedule daily web monitoring\n"
+        "/schedules — list Hermes schedules\n"
+        "/schedule_pause <id> — pause a Hermes schedule\n"
+        "/schedule_resume <id> — resume a paused Hermes schedule\n"
+        "/schedule_remove <id> — remove a Hermes schedule\n"
+        "/hermes — show recent Hermes audit entries\n"
+        "/hermes_status — show Hermes scheduler health\n"
+        "/approvals — show pending Hermes approvals\n"
+        "/approve <id> — approve a pending Hermes action\n"
+        "/deny <id> [reason] — deny a pending Hermes action\n"
         "/note <text> — quick capture\n"
         "/recall [query] — search everything you've captured\n"
         "/memory — what I remember about you\n"
@@ -423,20 +475,614 @@ async def brief_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await msg.edit_text("\n".join(lines), parse_mode="Markdown")
 
 
+def _jsonb_dict(value) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        import json
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _display_name(update: Update) -> str:
+    user = update.effective_user
+    if user.username:
+        return user.username
+    full_name = " ".join(p for p in [user.first_name, user.last_name] if p)
+    return full_name or str(user.id)
+
+
+async def _decide_and_audit(update: Update, name: str, description: str,
+                            risk: ActionRisk, params: dict | None = None):
+    action = HermesAction(
+        name=name,
+        description=description,
+        actor_user_id=update.effective_user.id,
+        chat_id=update.effective_chat.id,
+        risk=risk,
+        params=params or {},
+    )
+    decision = _hermes_policy.decide(action)
+    await record_decision(decision)
+    return decision
+
+
+async def _request_confirmation_if_needed(update: Update, decision) -> bool:
+    if not decision.needs_confirmation:
+        return False
+    approval_id = await create_approval_from_decision(decision)
+    await update.message.reply_text(
+        f"{decision.confirmation_prompt}\n\n"
+        f"Approval request: `#{approval_id}`\n"
+        f"Use /approve {approval_id} or /deny {approval_id} <reason>.",
+        parse_mode="Markdown",
+    )
+    return True
+
+
+async def hermes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    rows = await get_recent_hermes_audit(update.effective_chat.id, limit=8)
+    if not rows:
+        await update.message.reply_text("Hermes is active. No audit entries for this chat yet.")
+        return
+    lines = ["*Hermes audit:*"]
+    for row in rows:
+        created = row["created_at"].strftime("%d %b %H:%M") if row.get("created_at") else ""
+        lines.append(
+            f"• `{row['action_name']}` — {row['decision']} / {row['status']} "
+            f"_{created}_"
+        )
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def hermes_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    await _decide_and_audit(
+        update,
+        "hermes_status",
+        "Read Hermes scheduler health.",
+        ActionRisk.READ_ONLY,
+    )
+    health = await get_hermes_scheduler_health()
+    approvals = await get_hermes_approval_counts(update.effective_chat.id)
+    scheduler_state = "running" if _hermes_scheduler and _hermes_scheduler.is_running else "stopped"
+    next_run = health["next_run_at"].strftime("%d %b %H:%M") if health.get("next_run_at") else "none"
+    lines = [
+        "*Hermes status:*",
+        f"Scheduler: `{scheduler_state}`",
+        f"Active jobs: `{health['active_jobs']}`",
+        f"Paused jobs: `{health['paused_jobs']}`",
+        f"Due jobs: `{health['due_jobs']}`",
+        f"Errored jobs: `{health['errored_jobs']}`",
+        f"Next run: `{next_run}`",
+        f"Pending approvals: `{approvals['pending']}`",
+        f"Expired approvals: `{approvals['expired']}`",
+    ]
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def approvals_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    rows = await get_pending_hermes_approvals(update.effective_chat.id, limit=10)
+    if not rows:
+        await update.message.reply_text("No pending Hermes approvals.")
+        return
+    lines = ["*Pending Hermes approvals:*"]
+    for row in rows:
+        lines.append(approval_summary(row))
+    lines.append("\nUse /approve <id> or /deny <id> <reason>.")
+    await update.message.reply_text("\n\n".join(lines), parse_mode="Markdown")
+
+
+async def approve_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Usage: /approve <approval_id>")
+        return
+    approval_id = int(context.args[0])
+    row = await resolve_hermes_approval(
+        approval_id,
+        update.effective_chat.id,
+        update.effective_user.id,
+        "approved",
+    )
+    if not row:
+        existing = await get_hermes_approval(approval_id, update.effective_chat.id)
+        if existing and existing.get("status") == "expired":
+            await update.message.reply_text(f"Approval #{approval_id} has expired. Create a fresh request.")
+        else:
+            await update.message.reply_text(f"Approval #{approval_id} not found or already resolved.")
+        return
+    await _decide_and_audit(
+        update,
+        f"approval:{row['action_name']}",
+        f"Approved Hermes action #{approval_id}.",
+        ActionRisk.READ_ONLY,
+        {"approval_id": approval_id, "approved_action": row["action_name"]},
+    )
+    await update.message.reply_text(
+        f"✅ Approved Hermes request #{approval_id}: `{row['action_name']}`",
+        parse_mode="Markdown",
+    )
+
+
+async def deny_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Usage: /deny <approval_id> [reason]")
+        return
+    approval_id = int(context.args[0])
+    note = " ".join(context.args[1:]).strip() or None
+    row = await resolve_hermes_approval(
+        approval_id,
+        update.effective_chat.id,
+        update.effective_user.id,
+        "denied",
+        note,
+    )
+    if not row:
+        existing = await get_hermes_approval(approval_id, update.effective_chat.id)
+        if existing and existing.get("status") == "expired":
+            await update.message.reply_text(f"Approval #{approval_id} has already expired.")
+        else:
+            await update.message.reply_text(f"Approval #{approval_id} not found or already resolved.")
+        return
+    await _decide_and_audit(
+        update,
+        f"denial:{row['action_name']}",
+        f"Denied Hermes action #{approval_id}.",
+        ActionRisk.READ_ONLY,
+        {"approval_id": approval_id, "denied_action": row["action_name"], "reason": note},
+    )
+    suffix = f"\nReason: {note}" if note else ""
+    await update.message.reply_text(
+        f"⛔ Denied Hermes request #{approval_id}: `{row['action_name']}`{suffix}",
+        parse_mode="Markdown",
+    )
+
+
+async def standup_start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    raw = " ".join(context.args).strip()
+    participants = parse_participants(raw)
+    if not participants:
+        await update.message.reply_text("Usage: /standup_start Alice, Bob, Charlie")
+        return
+    decision = await _decide_and_audit(
+        update,
+        "standup_start",
+        "Open an internal standup workflow in this chat.",
+        ActionRisk.LOW,
+        {"participants": participants},
+    )
+    if await _request_confirmation_if_needed(update, decision):
+        return
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this standup: {decision.reason}")
+        return
+    existing = await get_open_standup_session(update.effective_chat.id)
+    if existing:
+        await update.message.reply_text("A standup is already open. Use /standup_status or /standup_close.")
+        return
+    session_id = await create_standup_session(
+        update.effective_chat.id,
+        update.effective_user.id,
+        participants,
+    )
+    await update.message.reply_text(
+        f"✅ Standup #{session_id} opened.\n"
+        "Team, post updates with /standup_update <yesterday / today / blockers>."
+    )
+
+
+async def standup_update_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    text = " ".join(context.args).strip()
+    if not text:
+        await update.message.reply_text("Usage: /standup_update shipped X, today Y, blocked by Z")
+        return
+    decision = await _decide_and_audit(
+        update,
+        "standup_update",
+        "Record a team member standup update.",
+        ActionRisk.LOW,
+        {"prompt": text},
+    )
+    if await _request_confirmation_if_needed(update, decision):
+        return
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this update: {decision.reason}")
+        return
+    session = await save_standup_update(update.effective_chat.id, _display_name(update), text)
+    if not session:
+        await update.message.reply_text("No open standup. Start one with /standup_start <names>.")
+        return
+    await update.message.reply_text("✅ Standup update recorded.")
+
+
+async def standup_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    await _decide_and_audit(
+        update,
+        "standup_status",
+        "Read current standup workflow status.",
+        ActionRisk.READ_ONLY,
+    )
+    session = await get_open_standup_session(update.effective_chat.id)
+    if not session:
+        await update.message.reply_text("No open standup.")
+        return
+    updates = _jsonb_dict(session.get("updates"))
+    participants = list(session.get("participants") or [])
+    missing = missing_standup_participants(participants, updates)
+    await update.message.reply_text(
+        summarize_standup_updates(updates, missing)
+    )
+
+
+async def standup_chase_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    decision = await _decide_and_audit(
+        update,
+        "standup_chase",
+        "Remind missing standup participants in the current chat.",
+        ActionRisk.LOW,
+    )
+    if await _request_confirmation_if_needed(update, decision):
+        return
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this chase: {decision.reason}")
+        return
+    session = await get_open_standup_session(update.effective_chat.id)
+    if not session:
+        await update.message.reply_text("No open standup.")
+        return
+    updates = _jsonb_dict(session.get("updates"))
+    participants = list(session.get("participants") or [])
+    missing = missing_standup_participants(participants, updates)
+    await update.message.reply_text(standup_chase_message(missing))
+
+
+async def standup_close_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    decision = await _decide_and_audit(
+        update,
+        "standup_close",
+        "Close and summarize the current standup workflow.",
+        ActionRisk.LOW,
+    )
+    if await _request_confirmation_if_needed(update, decision):
+        return
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this close: {decision.reason}")
+        return
+    session = await get_open_standup_session(update.effective_chat.id)
+    if not session:
+        await update.message.reply_text("No open standup.")
+        return
+    updates = _jsonb_dict(session.get("updates"))
+    participants = list(session.get("participants") or [])
+    missing = missing_standup_participants(participants, updates)
+    summary = summarize_standup_updates(updates, missing)
+    await close_standup_session(update.effective_chat.id, summary)
+    await update.message.reply_text(summary)
+
+
+async def standup_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("Usage: /standup_schedule <HH:MM> Alice, Bob, Charlie")
+        return
+    schedule_value = context.args[0]
+    raw_participants = " ".join(context.args[1:])
+    try:
+        daily_at = parse_daily_time(schedule_value)
+    except ValueError as exc:
+        await update.message.reply_text(f"Invalid time: {exc}")
+        return
+    participants = parse_participants(raw_participants)
+    if not participants:
+        await update.message.reply_text("Add at least one participant.")
+        return
+    decision = await _decide_and_audit(
+        update,
+        "schedule_daily_standup",
+        "Create a recurring daily standup prompt.",
+        ActionRisk.LOW,
+        {"participants": participants, "schedule_value": schedule_value},
+    )
+    if await _request_confirmation_if_needed(update, decision):
+        return
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this schedule: {decision.reason}")
+        return
+    next_run_at = next_daily_run(datetime_now(), daily_at)
+    job_id = await create_hermes_job(
+        update.effective_chat.id,
+        update.effective_user.id,
+        "daily_standup",
+        "daily",
+        schedule_value,
+        next_run_at,
+        {"participants": participants},
+    )
+    await update.message.reply_text(
+        f"✅ Daily standup schedule #{job_id} created for {schedule_value}.\n"
+        f"Next prompt: {next_run_at.strftime('%d %b %H:%M')}."
+    )
+
+
+async def standup_chase_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    if len(context.args) != 1:
+        await update.message.reply_text("Usage: /standup_chase_schedule <HH:MM>")
+        return
+    schedule_value = context.args[0]
+    try:
+        daily_at = parse_daily_time(schedule_value)
+    except ValueError as exc:
+        await update.message.reply_text(f"Invalid time: {exc}")
+        return
+    decision = await _decide_and_audit(
+        update,
+        "schedule_standup_chase",
+        "Create a recurring daily standup chase reminder.",
+        ActionRisk.LOW,
+        {"schedule_value": schedule_value},
+    )
+    if await _request_confirmation_if_needed(update, decision):
+        return
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this chase schedule: {decision.reason}")
+        return
+    next_run_at = next_daily_run(datetime_now(), daily_at)
+    job_id = await create_hermes_job(
+        update.effective_chat.id,
+        update.effective_user.id,
+        "standup_chase",
+        "daily",
+        schedule_value,
+        next_run_at,
+        {},
+    )
+    await update.message.reply_text(
+        f"✅ Daily standup chase schedule #{job_id} created for {schedule_value}.\n"
+        f"Next chase: {next_run_at.strftime('%d %b %H:%M')}."
+    )
+
+
+async def monitor_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("Usage: /monitor_schedule <HH:MM> <query>")
+        return
+    schedule_value = context.args[0]
+    query = " ".join(context.args[1:]).strip()
+    try:
+        daily_at = parse_daily_time(schedule_value)
+    except ValueError as exc:
+        await update.message.reply_text(f"Invalid time: {exc}")
+        return
+    decision = await _decide_and_audit(
+        update,
+        "schedule_web_monitor",
+        "Create a recurring daily web monitor.",
+        ActionRisk.LOW,
+        {"schedule_value": schedule_value, "query": query},
+    )
+    if await _request_confirmation_if_needed(update, decision):
+        return
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this monitor schedule: {decision.reason}")
+        return
+    next_run_at = next_daily_run(datetime_now(), daily_at)
+    job_id = await create_hermes_job(
+        update.effective_chat.id,
+        update.effective_user.id,
+        "web_monitor",
+        "daily",
+        schedule_value,
+        next_run_at,
+        {"query": query},
+    )
+    await update.message.reply_text(
+        f"✅ Daily web monitor #{job_id} created for {schedule_value}.\n"
+        f"Query: {query}\n"
+        f"Next check: {next_run_at.strftime('%d %b %H:%M')}."
+    )
+
+
+async def schedules_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    await _decide_and_audit(
+        update,
+        "list_schedules",
+        "Read Hermes scheduled jobs.",
+        ActionRisk.READ_ONLY,
+    )
+    jobs = await get_hermes_jobs(update.effective_chat.id, limit=20)
+    if not jobs:
+        await update.message.reply_text("No Hermes schedules for this chat.")
+        return
+    lines = ["*Hermes schedules:*"]
+    for job in jobs:
+        next_run = job["next_run_at"].strftime("%d %b %H:%M") if job.get("next_run_at") else ""
+        failure = ""
+        if job.get("consecutive_failures"):
+            failure = f" failures={job['consecutive_failures']}"
+        error = ""
+        if job.get("last_error"):
+            error = f"\n  last error: {str(job['last_error'])[:120]}"
+        lines.append(
+            f"• `#{job['id']}` {job['job_type']} — {job['status']} "
+            f"{job['schedule_kind']} {job['schedule_value']} next {next_run}{failure}{error}"
+        )
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+async def schedule_pause_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Usage: /schedule_pause <id>")
+        return
+    job_id = int(context.args[0])
+    decision = await _decide_and_audit(
+        update,
+        "pause_schedule",
+        f"Pause Hermes schedule #{job_id}.",
+        ActionRisk.LOW,
+        {"job_id": job_id},
+    )
+    if await _request_confirmation_if_needed(update, decision):
+        return
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this pause: {decision.reason}")
+        return
+    if await pause_hermes_job(update.effective_chat.id, job_id):
+        await update.message.reply_text(f"✅ Paused Hermes schedule #{job_id}.")
+    else:
+        await update.message.reply_text(f"Schedule #{job_id} not found or already inactive.")
+
+
+async def schedule_resume_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Usage: /schedule_resume <id>")
+        return
+    job_id = int(context.args[0])
+    jobs = await get_hermes_jobs(update.effective_chat.id, limit=100)
+    job = next((j for j in jobs if j["id"] == job_id), None)
+    if not job:
+        await update.message.reply_text(f"Schedule #{job_id} not found.")
+        return
+    if job["schedule_kind"] != "daily":
+        await update.message.reply_text(f"Schedule #{job_id} cannot be resumed automatically.")
+        return
+    decision = await _decide_and_audit(
+        update,
+        "resume_schedule",
+        f"Resume Hermes schedule #{job_id}.",
+        ActionRisk.LOW,
+        {"job_id": job_id},
+    )
+    if await _request_confirmation_if_needed(update, decision):
+        return
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this resume: {decision.reason}")
+        return
+    try:
+        daily_at = parse_daily_time(job["schedule_value"])
+    except ValueError:
+        await update.message.reply_text(f"Schedule #{job_id} has an invalid daily time.")
+        return
+    next_run_at = next_daily_run(datetime_now(), daily_at)
+    if await resume_hermes_job(update.effective_chat.id, job_id, next_run_at):
+        await update.message.reply_text(
+            f"✅ Resumed Hermes schedule #{job_id}.\n"
+            f"Next prompt: {next_run_at.strftime('%d %b %H:%M')}."
+        )
+    else:
+        await update.message.reply_text(f"Schedule #{job_id} is not paused or could not be resumed.")
+
+
+async def schedule_remove_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("Usage: /schedule_remove <id>")
+        return
+    job_id = int(context.args[0])
+    decision = await _decide_and_audit(
+        update,
+        "remove_schedule",
+        f"Remove Hermes schedule #{job_id}.",
+        ActionRisk.LOW,
+        {"job_id": job_id},
+    )
+    if await _request_confirmation_if_needed(update, decision):
+        return
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this removal: {decision.reason}")
+        return
+    if await remove_hermes_job(update.effective_chat.id, job_id):
+        await update.message.reply_text(f"✅ Removed Hermes schedule #{job_id}.")
+    else:
+        await update.message.reply_text(f"Schedule #{job_id} not found or already removed.")
+
+
+def datetime_now():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from hermes.scheduler import HERMES_TIMEZONE
+
+    return datetime.now(ZoneInfo(HERMES_TIMEZONE))
+
+
 # ── Message handlers ─────────────────────────────────────────────
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
         return
+    bot_username, bot_id = _bot_identity(context)
+    if not should_process_message(update, bot_username=bot_username, bot_id=bot_id):
+        return
+    text = strip_bot_mention(update.message.text, bot_username)
+    if await _maybe_capture_standup_update(update, text):
+        return
     try:
-        await _process_text(update, update.effective_user.id, update.message.text)
+        await _process_text(update, update.effective_user.id, text)
     except Exception as e:
         logger.error(f"handle_message error: {e}")
         await update.message.reply_text("⚠️ Something went wrong. Please try again.")
 
 
+async def _maybe_capture_standup_update(update: Update, text: str) -> bool:
+    if not looks_like_standup_update(text):
+        return False
+    session = await get_open_standup_session(update.effective_chat.id)
+    if not session:
+        return False
+    decision = await _decide_and_audit(
+        update,
+        "standup_update_natural",
+        "Record a natural-language standup update.",
+        ActionRisk.LOW,
+        {"prompt": text},
+    )
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this standup update: {decision.reason}")
+        return True
+    await save_standup_update(update.effective_chat.id, _display_name(update), text)
+    await update.message.reply_text("✅ Standup update recorded.")
+    return True
+
+
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
+        return
+    bot_username, bot_id = _bot_identity(context)
+    if not should_process_message(update, bot_username=bot_username, bot_id=bot_id):
         return
     msg = await update.message.reply_text("🎙️ Transcribing...")
     text = None
@@ -466,8 +1112,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
         return
+    bot_username, bot_id = _bot_identity(context)
+    if not should_process_message(update, bot_username=bot_username, bot_id=bot_id):
+        return
     doc = update.message.document
-    caption = update.message.caption or ""
+    caption = strip_bot_mention(update.message.caption or "", bot_username)
     msg = await update.message.reply_text(f"📄 Processing *{doc.file_name}*...", parse_mode="Markdown")
 
     try:
@@ -516,7 +1165,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
         return
-    caption = update.message.caption or ""
+    bot_username, bot_id = _bot_identity(context)
+    if not should_process_message(update, bot_username=bot_username, bot_id=bot_id):
+        return
+    caption = strip_bot_mention(update.message.caption or "", bot_username)
     vision_model = os.getenv("VISION_MODEL", "")
 
     if not vision_model:
@@ -564,6 +1216,13 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ── App entry point ──────────────────────────────────────────────
 
 def main():
+    report = collect_preflight_report(os.environ)
+    if not report.ok:
+        logger.error("\n%s", render_report(report))
+        raise SystemExit(1)
+    for warning in report.warnings:
+        logger.warning("Preflight: %s", warning)
+
     app = (
         ApplicationBuilder()
         .token(TELEGRAM_TOKEN)
@@ -584,6 +1243,23 @@ def main():
     app.add_handler(CommandHandler("tasks", tasks_cmd))
     app.add_handler(CommandHandler("done", done_cmd))
     app.add_handler(CommandHandler("brief", brief_cmd))
+    app.add_handler(CommandHandler("hermes", hermes_cmd))
+    app.add_handler(CommandHandler("hermes_status", hermes_status_cmd))
+    app.add_handler(CommandHandler("approvals", approvals_cmd))
+    app.add_handler(CommandHandler("approve", approve_cmd))
+    app.add_handler(CommandHandler("deny", deny_cmd))
+    app.add_handler(CommandHandler("standup_start", standup_start_cmd))
+    app.add_handler(CommandHandler("standup_update", standup_update_cmd))
+    app.add_handler(CommandHandler("standup_status", standup_status_cmd))
+    app.add_handler(CommandHandler("standup_chase", standup_chase_cmd))
+    app.add_handler(CommandHandler("standup_close", standup_close_cmd))
+    app.add_handler(CommandHandler("standup_schedule", standup_schedule_cmd))
+    app.add_handler(CommandHandler("standup_chase_schedule", standup_chase_schedule_cmd))
+    app.add_handler(CommandHandler("monitor_schedule", monitor_schedule_cmd))
+    app.add_handler(CommandHandler("schedules", schedules_cmd))
+    app.add_handler(CommandHandler("schedule_pause", schedule_pause_cmd))
+    app.add_handler(CommandHandler("schedule_resume", schedule_resume_cmd))
+    app.add_handler(CommandHandler("schedule_remove", schedule_remove_cmd))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))

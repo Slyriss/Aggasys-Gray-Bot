@@ -1,5 +1,13 @@
 .env
+.env.*
+!.env.example
+.venv/
 __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+.pytest_cache/
+.mypy_cache/
+*.log
+backups/
+DEPLOY_STATUS.md

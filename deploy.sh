@@ -4,7 +4,7 @@
 # "fresh"   = first-time install (drops nothing, init.sql runs via Docker)
 # "upgrade" = existing install, runs migration.sql then rebuilds
 
-set -e
+set -euo pipefail
 MODE=${1:-upgrade}
 DEPLOY_DIR="$HOME/aggasys-bot"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,26 +21,13 @@ echo "  ╚═══════════════════════
 echo ""
 
 # ── 1. Pre-flight checks ─────────────────────────────────────────
+case "$MODE" in
+    fresh|upgrade) ;;
+    *) error "Unknown deploy mode '$MODE'. Usage: bash deploy.sh [fresh|upgrade]" ;;
+esac
+
 info "Checking prerequisites..."
-command -v docker  >/dev/null || error "docker not found"
-command -v ollama  >/dev/null || error "ollama not found — install from ollama.com"
-
-# ── 2. Pull required Ollama models ──────────────────────────────
-info "Checking Ollama models..."
-
-if ollama list | grep -q "qwen2.5:3b"; then
-    info "qwen2.5:3b already present"
-else
-    warn "Pulling qwen2.5:3b (this may take a few minutes)..."
-    ollama pull qwen2.5:3b
-fi
-
-if ollama list | grep -q "nomic-embed-text"; then
-    info "nomic-embed-text already present"
-else
-    warn "Pulling nomic-embed-text (required for semantic search)..."
-    ollama pull nomic-embed-text
-fi
+bash scripts/check_vps_prereqs.sh --skip-models || error "VPS prerequisite check failed"
 
 # ── 3. Copy project files ────────────────────────────────────────
 if [ "$SCRIPT_DIR" != "$DEPLOY_DIR" ]; then
@@ -55,6 +42,49 @@ cd "$DEPLOY_DIR"
 if [ ! -f .env ]; then
     error ".env file not found. Create it from the template in the project."
 fi
+
+info "Running Gray/Hermes preflight..."
+python3 bot/preflight.py --env-file .env || error "Preflight failed. Fix .env before deploying."
+
+MODEL_PROVIDER=$(grep "^MODEL_PROVIDER=" .env | cut -d= -f2 | tr -d ' ' || true)
+EMBEDDING_PROVIDER=$(grep "^EMBEDDING_PROVIDER=" .env | cut -d= -f2 | tr -d ' ' || true)
+MODEL_PROVIDER=${MODEL_PROVIDER:-deepseek}
+EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-disabled}
+
+# ── 4b. Pull required Ollama models when local inference/embeddings are enabled ──
+if [ "$MODEL_PROVIDER" = "ollama" ] || [ "$EMBEDDING_PROVIDER" = "ollama" ]; then
+    info "Checking Ollama models..."
+    OLLAMA_MODEL=$(grep "^OLLAMA_MODEL=" .env | cut -d= -f2 | tr -d ' ' || true)
+    EMBED_MODEL=$(grep "^EMBED_MODEL=" .env | cut -d= -f2 | tr -d ' ' || true)
+    OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
+    EMBED_MODEL=${EMBED_MODEL:-nomic-embed-text}
+
+    if ollama list | awk '{print $1}' | grep -Fx "$OLLAMA_MODEL" >/dev/null 2>&1; then
+        info "$OLLAMA_MODEL already present"
+    else
+        warn "Pulling $OLLAMA_MODEL (this may take a few minutes)..."
+        ollama pull "$OLLAMA_MODEL"
+    fi
+
+    if [ "$EMBEDDING_PROVIDER" = "ollama" ]; then
+        if ollama list | awk '{print $1}' | grep -Fx "$EMBED_MODEL" >/dev/null 2>&1; then
+            info "$EMBED_MODEL already present"
+        else
+            warn "Pulling $EMBED_MODEL (required for semantic search)..."
+            ollama pull "$EMBED_MODEL"
+        fi
+    fi
+
+    bash scripts/check_vps_prereqs.sh || error "VPS prerequisite check failed after model pull"
+else
+    info "Skipping Ollama model pull for MODEL_PROVIDER=$MODEL_PROVIDER EMBEDDING_PROVIDER=$EMBEDDING_PROVIDER"
+fi
+
+info "Running local verification checks..."
+python3 scripts/run_checks.py || error "Local verification failed. Fix checks before deploying."
+
+info "Validating Docker Compose config..."
+docker compose config >/dev/null || error "Docker Compose config is invalid."
 
 # Warn if ALLOWED_USERS is empty
 ALLOWED=$(grep "^ALLOWED_USERS=" .env | cut -d= -f2 | tr -d ' ')
@@ -75,19 +105,23 @@ elif [ "$MODE" = "upgrade" ]; then
     info "Upgrade mode — running migration.sql on existing database..."
     # Start only postgres to run migration
     docker compose up -d postgres
-    sleep 5  # wait for postgres to be ready
+    info "Waiting for Postgres healthcheck..."
+    for attempt in $(seq 1 30); do
+        if docker compose exec -T postgres pg_isready -U aggasys -d aggasys >/dev/null 2>&1; then
+            break
+        fi
+        if [ "$attempt" -eq 30 ]; then
+            error "Postgres did not become ready in time."
+        fi
+        sleep 2
+    done
 
-    # Check if migration is needed (test for company_memory table)
-    TABLES=$(docker compose exec -T postgres psql -U aggasys -d aggasys -tAc \
-        "SELECT tablename FROM pg_tables WHERE schemaname='public'" 2>/dev/null || echo "")
+    info "Backing up Hermes operational data..."
+    bash scripts/backup_hermes_data.sh backups || error "Hermes data backup failed. Migration not started."
 
-    if echo "$TABLES" | grep -q "company_memory"; then
-        info "Migration already applied — company_memory table exists"
-    else
-        info "Applying migration.sql..."
-        docker compose exec -T postgres psql -U aggasys -d aggasys < migration.sql
-        info "Migration complete"
-    fi
+    info "Applying idempotent migration.sql..."
+    docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U aggasys -d aggasys < migration.sql
+    info "Migration complete"
 fi
 
 # ── 6. Build and start ───────────────────────────────────────────
@@ -101,7 +135,8 @@ sleep 15
 info "Checking service health..."
 docker compose ps
 
-BOT_STATUS=$(docker compose ps bot --format json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('State','unknown'))" 2>/dev/null || echo "unknown")
+info "Running post-deploy health check..."
+bash scripts/check_post_deploy_health.sh || error "Post-deploy health check failed."
 
 echo ""
 if docker compose logs bot --tail=20 2>&1 | grep -q "Aggasys second brain starting\|polling"; then

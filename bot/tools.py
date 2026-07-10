@@ -3,8 +3,11 @@ import re
 import logging
 from datetime import datetime
 import pytz
+from hermes import ActionRisk, HermesAction, HermesPolicy
+from hermes.audit import record_decision
 
 logger = logging.getLogger(__name__)
+_policy = HermesPolicy()
 
 TOOLS_SCHEMA = [
     {
@@ -92,6 +95,20 @@ async def wiki_search(query: str) -> str:
 
 
 async def run_tool(name: str, params: dict) -> str:
+    risk = ActionRisk.READ_ONLY if name in {"calculator", "get_datetime", "web_search", "wiki_search"} else ActionRisk.MEDIUM
+    action = HermesAction(
+        name=name,
+        description=f"Run tool `{name}`",
+        risk=risk,
+        params=params,
+    )
+    decision = _policy.decide(action)
+    await record_decision(decision)
+    if decision.needs_confirmation:
+        return decision.confirmation_prompt or "Hermes requires confirmation before this action."
+    if not decision.allowed:
+        return f"Hermes blocked this action: {decision.reason}"
+
     if name == "calculator":
         return await calculator(params.get("expression", ""))
     if name == "get_datetime":

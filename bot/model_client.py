@@ -5,12 +5,16 @@ import os
 import time
 from prompts import SYSTEM_PROMPT
 
+MODEL_PROVIDER = os.getenv("MODEL_PROVIDER", "deepseek").strip().lower()
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "24h")
 OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "4096"))
 OLLAMA_LIVE_CONCURRENCY = int(os.getenv("OLLAMA_LIVE_CONCURRENCY", "2"))
 OLLAMA_BACKGROUND_CONCURRENCY = int(os.getenv("OLLAMA_BACKGROUND_CONCURRENCY", "1"))
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 MAX_MEMORY_FACTS = int(os.getenv("MAX_MEMORY_FACTS", "12"))
 MAX_MEMORY_CHARS = int(os.getenv("MAX_MEMORY_CHARS", "160"))
 
@@ -73,10 +77,73 @@ def _log_usage(label: str, data: dict, elapsed: float):
     )
 
 
+def _provider() -> str:
+    return MODEL_PROVIDER
+
+
+def _openai_payload(messages: list, system: str, user_memory: list | None,
+                    temperature: float, stream: bool) -> dict:
+    return {
+        "model": DEEPSEEK_MODEL,
+        "messages": _build_messages(messages, system, user_memory),
+        "temperature": temperature,
+        "stream": stream,
+    }
+
+
+def _deepseek_headers() -> dict:
+    return {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+def _deepseek_chat_url() -> str:
+    return f"{DEEPSEEK_BASE_URL}/chat/completions"
+
+
+def _extract_openai_text(data: dict) -> str:
+    choices = data.get("choices") or []
+    if not choices:
+        return ""
+    message = choices[0].get("message") or {}
+    return message.get("content") or ""
+
+
+def _extract_openai_delta(data: dict) -> str:
+    choices = data.get("choices") or []
+    if not choices:
+        return ""
+    delta = choices[0].get("delta") or {}
+    return delta.get("content") or ""
+
+
 async def chat_completion(messages: list, system: str = SYSTEM_PROMPT,
                           user_memory: list = None, temperature: float = 0.7,
                           background: bool = False, label: str = "chat") -> str:
     """Single blocking completion — used for tool routing and memory extraction."""
+    if _provider() == "deepseek":
+        payload = _openai_payload(messages, system, user_memory, temperature, stream=False)
+        started = time.monotonic()
+        async with _get_sem(background):
+            response = await _client.post(
+                _deepseek_chat_url(),
+                json=payload,
+                headers=_deepseek_headers(),
+            )
+            response.raise_for_status()
+            data = response.json()
+        usage = data.get("usage") or {}
+        logger.info(
+            "deepseek.%s elapsed=%.2fs model=%s prompt_tokens=%s completion_tokens=%s",
+            label,
+            time.monotonic() - started,
+            data.get("model", DEEPSEEK_MODEL),
+            usage.get("prompt_tokens"),
+            usage.get("completion_tokens"),
+        )
+        return _extract_openai_text(data)
+
     payload = {
         "model": OLLAMA_MODEL,
         "messages": _build_messages(messages, system, user_memory),
@@ -95,7 +162,36 @@ async def chat_completion(messages: list, system: str = SYSTEM_PROMPT,
 
 async def stream_completion(messages: list, system: str = SYSTEM_PROMPT,
                             user_memory: list = None, label: str = "stream"):
-    """Async generator — yields text chunks as tokens arrive from Ollama."""
+    """Async generator — yields text chunks as tokens arrive from the configured provider."""
+    if _provider() == "deepseek":
+        payload = _openai_payload(messages, system, user_memory, temperature=0.7, stream=True)
+        started = time.monotonic()
+        async with _get_sem(background=False):
+            async with _client.stream(
+                "POST",
+                _deepseek_chat_url(),
+                json=payload,
+                headers=_deepseek_headers(),
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    chunk = line.removeprefix("data:").strip()
+                    if chunk == "[DONE]":
+                        logger.info(
+                            "deepseek.%s elapsed=%.2fs model=%s",
+                            label,
+                            time.monotonic() - started,
+                            DEEPSEEK_MODEL,
+                        )
+                        break
+                    data = json.loads(chunk)
+                    text = _extract_openai_delta(data)
+                    if text:
+                        yield text
+        return
+
     payload = {
         "model": OLLAMA_MODEL,
         "messages": _build_messages(messages, system, user_memory),

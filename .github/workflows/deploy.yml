@@ -16,17 +16,88 @@ jobs:
           cd ~/aggasys-bot
           git pull origin main
 
+      - name: Sync deployment secrets into VM env
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          cd ~/aggasys-bot
+          if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+            touch .env
+            upsert_env() {
+              local key="$1"
+              local value="$2"
+              if grep -q "^${key}=" .env; then
+                python3 - "$key" "$value" <<'PY'
+import sys
+from pathlib import Path
+
+key, value = sys.argv[1], sys.argv[2]
+path = Path(".env")
+lines = path.read_text(encoding="utf-8").splitlines()
+path.write_text(
+    "\n".join(
+        f"{key}={value}" if line.startswith(f"{key}=") else line
+        for line in lines
+    ) + "\n",
+    encoding="utf-8",
+)
+PY
+              else
+                printf '%s=%s\n' "$key" "$value" >> .env
+              fi
+            }
+            upsert_env MODEL_PROVIDER deepseek
+            upsert_env DEEPSEEK_API_KEY "$DEEPSEEK_API_KEY"
+            upsert_env DEEPSEEK_BASE_URL https://api.deepseek.com
+            upsert_env DEEPSEEK_MODEL deepseek-v4-flash
+            upsert_env EMBEDDING_PROVIDER disabled
+          else
+            echo "DEEPSEEK_API_KEY GitHub secret is not set; using existing VM .env."
+          fi
+
+      - name: Run Gray/Hermes verification gates
+        run: |
+          cd ~/aggasys-bot
+          bash scripts/check_vps_prereqs.sh --skip-models
+          python3 bot/preflight.py --env-file .env
+          python3 scripts/run_checks.py
+          docker compose config >/dev/null
+
       - name: Run database migration (idempotent)
         run: |
           cd ~/aggasys-bot
           docker compose up -d postgres
-          sleep 6
-          docker compose exec -T postgres psql -U aggasys -d aggasys < migration.sql || true
+          for attempt in $(seq 1 30); do
+            if docker compose exec -T postgres pg_isready -U aggasys -d aggasys >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "Postgres did not become ready in time."
+              exit 1
+            fi
+            sleep 2
+          done
+          bash scripts/backup_hermes_data.sh backups
+          docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U aggasys -d aggasys < migration.sql
 
       - name: Pull required Ollama models
         run: |
-          ollama pull qwen2.5:3b || true
-          ollama pull nomic-embed-text || true
+          cd ~/aggasys-bot
+          MODEL_PROVIDER="$(grep '^MODEL_PROVIDER=' .env | cut -d= -f2 | tr -d ' ' || true)"
+          EMBEDDING_PROVIDER="$(grep '^EMBEDDING_PROVIDER=' .env | cut -d= -f2 | tr -d ' ' || true)"
+          MODEL_PROVIDER="${MODEL_PROVIDER:-deepseek}"
+          EMBEDDING_PROVIDER="${EMBEDDING_PROVIDER:-disabled}"
+          if [ "$MODEL_PROVIDER" = "ollama" ] || [ "$EMBEDDING_PROVIDER" = "ollama" ]; then
+            OLLAMA_MODEL="$(grep '^OLLAMA_MODEL=' .env | cut -d= -f2 | tr -d ' ' || true)"
+            EMBED_MODEL="$(grep '^EMBED_MODEL=' .env | cut -d= -f2 | tr -d ' ' || true)"
+            ollama pull "${OLLAMA_MODEL:-qwen2.5:3b}" || true
+            if [ "$EMBEDDING_PROVIDER" = "ollama" ]; then
+              ollama pull "${EMBED_MODEL:-nomic-embed-text}" || true
+            fi
+          else
+            echo "Skipping Ollama model pull for MODEL_PROVIDER=$MODEL_PROVIDER EMBEDDING_PROVIDER=$EMBEDDING_PROVIDER"
+          fi
+          bash scripts/check_vps_prereqs.sh
 
       - name: Rebuild and restart bot
         run: |
@@ -37,6 +108,7 @@ jobs:
         run: |
           cd ~/aggasys-bot
           sleep 12
+          bash scripts/check_post_deploy_health.sh
 
           # Collect live VM state — redact credentials
           {
@@ -56,14 +128,37 @@ jobs:
               | sed 's/\(TOKEN\|PASSWORD\|PASS\|SECRET\)[=:][^ ]*/\1=***/gi'
             echo '```'
             echo ""
-            echo "## Ollama Models on Host"
+            echo "## Model Backend"
             echo '```'
-            ollama list 2>&1
+            MODEL_PROVIDER="$(grep '^MODEL_PROVIDER=' .env | cut -d= -f2 | tr -d ' ' || true)"
+            EMBEDDING_PROVIDER="$(grep '^EMBEDDING_PROVIDER=' .env | cut -d= -f2 | tr -d ' ' || true)"
+            echo "MODEL_PROVIDER=${MODEL_PROVIDER:-deepseek}"
+            echo "EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-disabled}"
+            if command -v ollama >/dev/null 2>&1; then
+              ollama list 2>&1
+            else
+              echo "Ollama not installed; not required for DeepSeek API mode."
+            fi
             echo '```'
             echo ""
             echo "## .env Keys Present (no values)"
             echo '```'
             grep -oE '^[A-Z_]+' ~/aggasys-bot/.env 2>/dev/null | sort
+            echo '```'
+            echo ""
+            echo "## Gray/Hermes Verification Gates"
+            echo '```'
+            python3 scripts/run_checks.py 2>&1
+            echo '```'
+            echo ""
+            echo "## Gray/Hermes Preflight"
+            echo '```'
+            python3 bot/preflight.py --env-file .env 2>&1
+            echo '```'
+            echo ""
+            echo "## Post-Deploy Health"
+            echo '```'
+            bash scripts/check_post_deploy_health.sh 2>&1
             echo '```'
           } > DEPLOY_STATUS.md
 

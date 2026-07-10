@@ -1,6 +1,6 @@
 import json
 import logging
-from ollama_client import chat_completion
+from model_client import chat_completion
 from db import save_user_memory, save_company_memory, save_task
 from embedding import embed_text
 

@@ -1,7 +1,7 @@
 import logging
 import os
 from db import get_pool
-from ollama_client import chat_completion
+from model_client import chat_completion
 from embedding import embed_text
 
 logger = logging.getLogger(__name__)

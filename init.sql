@@ -70,6 +70,70 @@ CREATE TABLE IF NOT EXISTS notes (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Hermes operations audit log
+CREATE TABLE IF NOT EXISTS hermes_audit_log (
+    id SERIAL PRIMARY KEY,
+    telegram_user_id BIGINT,
+    chat_id BIGINT,
+    action_name TEXT NOT NULL,
+    risk TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    status TEXT NOT NULL,
+    details JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Hermes approval requests for actions that need human confirmation
+CREATE TABLE IF NOT EXISTS hermes_approval_requests (
+    id SERIAL PRIMARY KEY,
+    telegram_user_id BIGINT,
+    chat_id BIGINT NOT NULL,
+    action_name TEXT NOT NULL,
+    risk TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    prompt TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    params JSONB NOT NULL DEFAULT '{}'::jsonb,
+    requested_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '24 hours'),
+    resolved_by BIGINT,
+    resolved_at TIMESTAMP,
+    resolution_note TEXT
+);
+
+-- Hermes scheduled jobs. Initial provider is in-process; schema keeps room for
+-- future external scheduler handoff on Hostinger.
+CREATE TABLE IF NOT EXISTS hermes_jobs (
+    id SERIAL PRIMARY KEY,
+    chat_id BIGINT NOT NULL,
+    created_by BIGINT,
+    job_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    schedule_kind TEXT NOT NULL,
+    schedule_value TEXT NOT NULL,
+    next_run_at TIMESTAMP NOT NULL,
+    last_run_at TIMESTAMP,
+    last_error TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    locked_at TIMESTAMP,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Hermes standup workflow state
+CREATE TABLE IF NOT EXISTS standup_sessions (
+    id SERIAL PRIMARY KEY,
+    chat_id BIGINT NOT NULL,
+    created_by BIGINT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    participants TEXT[] NOT NULL DEFAULT '{}',
+    updates JSONB NOT NULL DEFAULT '{}'::jsonb,
+    summary TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    completed_at TIMESTAMP
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(telegram_user_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_user_created_at ON conversations(telegram_user_id, created_at DESC);
@@ -83,3 +147,9 @@ CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(telegram_user_id, status, cre
 CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(telegram_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notes_embedding ON notes USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_notes_search ON notes USING gin(to_tsvector('english', content));
+CREATE INDEX IF NOT EXISTS idx_hermes_audit_chat_created_at ON hermes_audit_log(chat_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_hermes_approvals_chat_status ON hermes_approval_requests(chat_id, status, requested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_hermes_approvals_expiry ON hermes_approval_requests(status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_hermes_jobs_due ON hermes_jobs(status, next_run_at);
+CREATE INDEX IF NOT EXISTS idx_hermes_jobs_chat ON hermes_jobs(chat_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_standup_sessions_chat_status ON standup_sessions(chat_id, status, created_at DESC);

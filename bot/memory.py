@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from ollama_client import chat_completion
+from model_client import chat_completion
 
 logger = logging.getLogger(__name__)
 

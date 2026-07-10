@@ -4,7 +4,7 @@ Triggered when a user's raw message count exceeds SUMMARY_TRIGGER (default: 20).
 The summary is prepended to the system context so nothing important is lost.
 """
 import logging
-from ollama_client import chat_completion
+from model_client import chat_completion
 from db import (
     get_conversation_history, get_conversation_count,
     save_conversation_summary, get_conversation_summary,
