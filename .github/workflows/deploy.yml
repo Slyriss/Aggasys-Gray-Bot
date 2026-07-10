@@ -165,7 +165,7 @@ jobs:
           # Commit status back to main — paths-ignore above prevents re-trigger
           git config user.email "runner@aggasys-ai"
           git config user.name "VM Runner"
-          git add DEPLOY_STATUS.md
+          git add -f DEPLOY_STATUS.md
           git diff --staged --quiet || {
             git commit -m "Update deploy status [skip ci]"
             git pull --rebase origin main || true
