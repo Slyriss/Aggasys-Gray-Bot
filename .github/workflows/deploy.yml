@@ -54,19 +54,13 @@ jobs:
           upsert_env HERMES_GROUP_CHAT_MODE mention
           upsert_env GRAY_BOT_USERNAME GrayBot
 
-      - name: Ensure Python venv support
-        run: |
-          if ! python3 -c 'import ensurepip' >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y python3.10-venv || sudo apt-get install -y python3-venv
-          fi
-
       - name: Run Gray/Hermes verification gates
         run: |
           cd ~/aggasys-bot
           bash scripts/check_vps_prereqs.sh --skip-models
           python3 bot/preflight.py --env-file .env
-          python3 scripts/check_in_venv.py --venv .venv-deploy
+          python3 -m pip install --user -r bot/requirements.txt
+          python3 scripts/run_checks.py
           docker compose config >/dev/null
 
       - name: Run database migration (idempotent)
@@ -154,7 +148,7 @@ jobs:
             echo ""
             echo "## Gray/Hermes Verification Gates"
             echo '```'
-            python3 scripts/check_in_venv.py --venv .venv-deploy 2>&1
+            python3 scripts/run_checks.py 2>&1
             echo '```'
             echo ""
             echo "## Gray/Hermes Preflight"
