@@ -1,14 +1,14 @@
 # VM Deploy Status
 
-**Deployed:** Fri Jul 10 04:05:38 AM UTC 2026
-**Commit:** e642dceef5d28fb23b638a2a2ba73bfff9b13684
+**Deployed:** Fri Jul 10 04:18:17 AM UTC 2026
+**Commit:** e0aeedf455f3c253705b7ace8e15b98bcef8e0da
 
 ## Docker Services
 ```
 NAME                     IMAGE                    COMMAND                  SERVICE    CREATED          STATUS                    PORTS
-aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        18 seconds ago   Up 16 seconds             
-aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   16 minutes ago   Up 16 minutes (healthy)   5432/tcp
-aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      10 minutes ago   Up 10 minutes (healthy)   6379/tcp
+aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        19 seconds ago   Up 16 seconds             
+aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   29 minutes ago   Up 29 minutes (healthy)   5432/tcp
+aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      23 minutes ago   Up 22 minutes (healthy)   6379/tcp
 ```
 
 ## Bot Logs (last 30 lines)
@@ -54,9 +54,9 @@ TELEGRAM_TOKEN
 
 ## Gray/Hermes Verification Gates
 ```
-................................................................................................
+.....................................................................................................
 ----------------------------------------------------------------------
-Ran 96 tests in 0.582s
+Ran 101 tests in 0.545s
 
 OK
 Command surface verification OK
@@ -64,6 +64,16 @@ Deployment asset verification OK
 Release readiness OK
 Docker build smoke skipped. Run with --include-docker when Docker is available.
 Release readiness OK
++ /usr/bin/python3 -m unittest discover -s tests
++ /usr/bin/python3 -m compileall -q bot tests scripts
++ /usr/bin/python3 scripts/scan_secret_hygiene.py
++ /usr/bin/python3 scripts/runtime_import_smoke.py
++ /usr/bin/python3 scripts/verify_deployment_assets.py
++ /usr/bin/python3 scripts/verify_runtime_assets.py
++ /usr/bin/python3 scripts/verify_schema_assets.py
++ /usr/bin/python3 scripts/verify_policy_registry.py
++ /usr/bin/python3 scripts/verify_command_surface.py
+All local checks passed
 Runtime import smoke OK
 Secret hygiene scan OK
 Runtime import smoke OK
