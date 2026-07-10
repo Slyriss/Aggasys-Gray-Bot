@@ -136,6 +136,9 @@ container startup, and post-deploy health checks.
   operators.
 - `/ops_status` gives admins a redacted runtime view of model, role, rate-limit,
   upload-limit, backup, scheduler, and approval state without exposing secrets.
+- Unhandled Telegram handler failures are caught by a global error boundary,
+  replied to generically, and audited as `telegram_handler_error` with status
+  `handler_error` without storing exception text.
 - `RATE_LIMIT_MESSAGES` and `RATE_LIMIT_WINDOW_SECONDS` cap allowed-user traffic
   before model/database work starts. Rate-limit denials are written to Hermes
   audit as `rate_limited` with status `blocked_rate_limit`.

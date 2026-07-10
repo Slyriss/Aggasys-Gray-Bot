@@ -226,6 +226,54 @@ def _bot_identity(context: ContextTypes.DEFAULT_TYPE) -> tuple[str | None, int |
     return username, bot_id
 
 
+def _safe_update_user_id(update) -> int | None:
+    user = getattr(update, "effective_user", None)
+    return getattr(user, "id", None)
+
+
+def _safe_update_chat_id(update) -> int | None:
+    chat = getattr(update, "effective_chat", None)
+    return getattr(chat, "id", None)
+
+
+def _safe_update_message(update):
+    return getattr(update, "effective_message", None) or getattr(update, "message", None)
+
+
+def _safe_exc_info(error):
+    if isinstance(error, BaseException):
+        return (type(error), error, error.__traceback__)
+    return False
+
+
+async def telegram_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    error = getattr(context, "error", None)
+    error_type = type(error).__name__ if error else "UnknownError"
+    logger.error("Unhandled Telegram update error: %s", error_type, exc_info=_safe_exc_info(error))
+    decision = ActionDecision(
+        status=ActionStatus.DENIED,
+        reason="Unhandled Telegram update error.",
+        action=HermesAction(
+            name="telegram_handler_error",
+            description="Captured an unhandled Telegram handler exception.",
+            actor_user_id=_safe_update_user_id(update),
+            chat_id=_safe_update_chat_id(update),
+            risk=ActionRisk.READ_ONLY,
+            params={
+                "error_type": error_type,
+                "update_type": type(update).__name__ if update is not None else "None",
+            },
+        ),
+    )
+    await record_decision(decision, status="handler_error")
+    message = _safe_update_message(update)
+    if message:
+        try:
+            await message.reply_text("⚠️ Gray hit an internal error. The incident has been logged for admins.")
+        except Exception as reply_error:
+            logger.warning("Failed to send Telegram error reply: %s", type(reply_error).__name__)
+
+
 async def _memory_worker():
     while True:
         user_id, user_message, assistant_reply = await _memory_queue.get()
@@ -1512,6 +1560,7 @@ def main():
     app.add_handler(MessageHandler(filters.Document.ALL, _rate_limited(handle_document)))
     app.add_handler(MessageHandler(filters.PHOTO, _rate_limited(handle_photo)))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _rate_limited(handle_message)))
+    app.add_error_handler(telegram_error_handler)
 
     logger.info("Aggasys second brain starting...")
     app.run_polling(drop_pending_updates=True)

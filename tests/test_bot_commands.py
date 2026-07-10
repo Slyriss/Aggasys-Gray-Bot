@@ -395,5 +395,39 @@ class UploadLimitTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("document is too large", update.message.replies[0]["text"])
 
 
+class TelegramErrorHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_error_handler_replies_and_audits_without_secret_text(self):
+        update = fake_update(user_id=123)
+        error = RuntimeError("sk-secret-value-that-must-not-enter-audit")
+        context = SimpleNamespace(error=error)
+
+        with patch.object(bot_main, "record_decision", AsyncMock()) as record, \
+             patch.object(bot_main.logger, "error") as log_error:
+            await bot_main.telegram_error_handler(update, context)
+
+        log_error.assert_called_once()
+        record.assert_awaited_once()
+        decision = record.await_args.args[0]
+        self.assertEqual(decision.action.name, "telegram_handler_error")
+        self.assertEqual(decision.action.params["error_type"], "RuntimeError")
+        self.assertNotIn("sk-secret-value-that-must-not-enter-audit", str(decision.action.params))
+        self.assertEqual(record.await_args.kwargs["status"], "handler_error")
+        self.assertIn("incident has been logged", update.message.replies[0]["text"])
+
+    async def test_error_handler_handles_missing_update(self):
+        context = SimpleNamespace(error=ValueError("no update"))
+
+        with patch.object(bot_main, "record_decision", AsyncMock()) as record, \
+             patch.object(bot_main.logger, "error"):
+            await bot_main.telegram_error_handler(None, context)
+
+        record.assert_awaited_once()
+        decision = record.await_args.args[0]
+        self.assertEqual(decision.action.name, "telegram_handler_error")
+        self.assertIsNone(decision.action.actor_user_id)
+        self.assertIsNone(decision.action.chat_id)
+        self.assertEqual(decision.action.params["update_type"], "None")
+
+
 if __name__ == "__main__":
     unittest.main()

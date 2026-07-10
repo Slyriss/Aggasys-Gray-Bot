@@ -203,6 +203,7 @@ def main() -> int:
         "MAX_DOCUMENT_BYTES", "MAX_VOICE_BYTES", "MAX_PHOTO_BYTES",
         "_reject_oversize_upload", "upload_too_large:", "blocked_upload_size",
         "ops_status_cmd", "DeepSeek key: `{_configured_state",
+        "telegram_error_handler", "add_error_handler", "telegram_handler_error", "handler_error",
         "Restricted to Gray admins", "Restricted to Gray operators",
     ):
         if marker not in main_py:
@@ -275,6 +276,7 @@ def main() -> int:
         "The best time to deploy",
         "docs/TELEGRAM_SMOKE_TEST.md",
         "/ops_status",
+        "telegram_handler_error",
         "Supply ordering is intentionally not implemented yet",
     ):
         if marker not in readme:
