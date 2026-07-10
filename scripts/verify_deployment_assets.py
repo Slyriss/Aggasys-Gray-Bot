@@ -288,6 +288,8 @@ def main() -> int:
     workflow = _read(".github/workflows/deploy.yml")
     if "scripts/run_checks.py --skip-deploy-status" not in workflow:
         errors.append(".github/workflows/deploy.yml must skip deploy status verification while generating DEPLOY_STATUS.md.")
+    if "git restore --staged --worktree DEPLOY_STATUS.md" not in workflow:
+        errors.append(".github/workflows/deploy.yml must clean only generated deploy status before pulling.")
     deploy_status = _read("scripts/verify_deploy_status.py")
     for marker in ("TELEGRAM_TOKEN_RE", "RUNTIME_FAILURE_MARKERS", "REQUIRED_HEALTH_MARKERS", "Deploy status verification OK"):
         if marker not in deploy_status:

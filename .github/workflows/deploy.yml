@@ -17,6 +17,14 @@ jobs:
       - name: Pull latest code
         run: |
           cd ~/aggasys-bot
+          if [ -n "$(git status --porcelain -- DEPLOY_STATUS.md)" ]; then
+            git restore --staged --worktree DEPLOY_STATUS.md
+          fi
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            echo "Runner worktree has unexpected local changes; refusing to overwrite them."
+            exit 1
+          fi
           git pull --rebase origin main
 
       - name: Sync deployment secrets into VM env
