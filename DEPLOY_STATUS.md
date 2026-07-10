@@ -1,14 +1,14 @@
 # VM Deploy Status
 
-**Deployed:** Fri Jul 10 03:59:30 AM UTC 2026
-**Commit:** 3a68ec25969ae3fa4ebf1b8327b4c32320cb0861
+**Deployed:** Fri Jul 10 04:02:04 AM UTC 2026
+**Commit:** 94c87be78f9e69abc49759ed9812a9618966f904
 
 ## Docker Services
 ```
 NAME                     IMAGE                    COMMAND                  SERVICE    CREATED          STATUS                    PORTS
 aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        19 seconds ago   Up 16 seconds             
-aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   10 minutes ago   Up 10 minutes (healthy)   5432/tcp
-aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      4 minutes ago    Up 4 minutes (healthy)    6379/tcp
+aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   13 minutes ago   Up 13 minutes (healthy)   5432/tcp
+aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      6 minutes ago    Up 6 minutes (healthy)    6379/tcp
 ```
 
 ## Bot Logs (last 30 lines)
@@ -57,7 +57,7 @@ TELEGRAM_TOKEN
 ```
 ...............................................................................................
 ----------------------------------------------------------------------
-Ran 95 tests in 0.461s
+Ran 95 tests in 0.415s
 
 OK
 Command surface verification OK
