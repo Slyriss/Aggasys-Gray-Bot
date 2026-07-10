@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 
@@ -16,10 +17,21 @@ CHECKS = [
     [sys.executable, "scripts/verify_policy_registry.py"],
     [sys.executable, "scripts/verify_command_surface.py"],
 ]
+DEPLOY_STATUS_CHECK = [sys.executable, "scripts/verify_deploy_status.py"]
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run Gray/Hermes local verification gates.")
+    parser.add_argument(
+        "--skip-deploy-status",
+        action="store_true",
+        help="Skip DEPLOY_STATUS.md verification while that artifact is being generated.",
+    )
+    args = parser.parse_args(argv)
+
     for command in CHECKS:
+        if args.skip_deploy_status and command == DEPLOY_STATUS_CHECK:
+            continue
         print("+ " + " ".join(command))
         result = subprocess.run(command)
         if result.returncode != 0:

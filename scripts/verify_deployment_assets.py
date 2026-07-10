@@ -283,6 +283,11 @@ def main() -> int:
         errors.append("scripts/run_checks.py must run the secret hygiene scanner.")
     if "scripts/verify_deploy_status.py" not in run_checks:
         errors.append("scripts/run_checks.py must verify the deploy status artifact.")
+    if "--skip-deploy-status" not in run_checks:
+        errors.append("scripts/run_checks.py must support skipping deploy status verification during status generation.")
+    workflow = _read(".github/workflows/deploy.yml")
+    if "scripts/run_checks.py --skip-deploy-status" not in workflow:
+        errors.append(".github/workflows/deploy.yml must skip deploy status verification while generating DEPLOY_STATUS.md.")
     deploy_status = _read("scripts/verify_deploy_status.py")
     for marker in ("TELEGRAM_TOKEN_RE", "RUNTIME_FAILURE_MARKERS", "REQUIRED_HEALTH_MARKERS", "Deploy status verification OK"):
         if marker not in deploy_status:
