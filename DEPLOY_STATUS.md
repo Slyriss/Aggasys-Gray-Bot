@@ -1,7 +1,7 @@
 # VM Deploy Status
 
-**Deployed:** Fri Jul 10 05:05:30 AM UTC 2026
-**Commit:** 589aae83f161b121a3c4f67537308d6a686b07d3
+**Deployed:** Fri Jul 10 05:09:49 AM UTC 2026
+**Commit:** e34b006be98800731d58ba09119860b15f933a23
 
 ## Docker Services
 ```
@@ -65,11 +65,11 @@ TELEGRAM_TOKEN
 
 ## Gray/Hermes Verification Gates
 ```
-................................................................................................................................INFO:url_ingester:Blocking URL host internal.example.com resolved to non-public address 192.168.1.10
+...................................................................................................................................INFO:url_ingester:Blocking URL host internal.example.com resolved to non-public address 192.168.1.10
 ..INFO:url_ingester:Blocked unsafe URL redirect target: http://127.0.0.1/admin
 ..
 ----------------------------------------------------------------------
-Ran 132 tests in 0.617s
+Ran 135 tests in 0.551s
 
 OK
 Command surface verification OK
