@@ -1,7 +1,7 @@
 # VM Deploy Status
 
-**Deployed:** Fri Jul 10 04:59:41 AM UTC 2026
-**Commit:** f604ac21491224e73eed9ac44663d2c4390c8102
+**Deployed:** Fri Jul 10 05:05:30 AM UTC 2026
+**Commit:** 589aae83f161b121a3c4f67537308d6a686b07d3
 
 ## Docker Services
 ```
@@ -46,8 +46,10 @@ DEEPSEEK_BASE_URL
 DEEPSEEK_MODEL
 EMBEDDING_PROVIDER
 GRAY_BOT_USERNAME
+HERMES_AUDIT_RETENTION_DAYS
 HERMES_BACKUP_RETENTION_DAYS
 HERMES_GROUP_CHAT_MODE
+HERMES_OPERATION_RETENTION_DAYS
 HERMES_TIMEZONE
 MAX_DOCUMENT_BYTES
 MAX_PHOTO_BYTES
@@ -63,11 +65,11 @@ TELEGRAM_TOKEN
 
 ## Gray/Hermes Verification Gates
 ```
-..............................................................................................................................INFO:url_ingester:Blocking URL host internal.example.com resolved to non-public address 192.168.1.10
+................................................................................................................................INFO:url_ingester:Blocking URL host internal.example.com resolved to non-public address 192.168.1.10
 ..INFO:url_ingester:Blocked unsafe URL redirect target: http://127.0.0.1/admin
 ..
 ----------------------------------------------------------------------
-Ran 130 tests in 0.564s
+Ran 132 tests in 0.617s
 
 OK
 Command surface verification OK
