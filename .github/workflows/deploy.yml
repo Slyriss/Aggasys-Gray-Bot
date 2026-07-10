@@ -19,19 +19,21 @@ jobs:
       - name: Sync deployment secrets into VM env
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          ALLOWED_USERS: ${{ secrets.ALLOWED_USERS }}
+          DB_PASS: ${{ secrets.DB_PASS }}
         run: |
           cd ~/aggasys-bot
+          touch .env
+          upsert_env() {
+            local key="$1"
+            local value="$2"
+            if grep -q "^${key}=" .env; then
+              python3 -c 'import sys; from pathlib import Path; key,value=sys.argv[1],sys.argv[2]; path=Path(".env"); lines=path.read_text(encoding="utf-8").splitlines(); path.write_text("\n".join((f"{key}={value}" if line.startswith(f"{key}=") else line) for line in lines) + "\n", encoding="utf-8")' "$key" "$value"
+            else
+              printf '%s=%s\n' "$key" "$value" >> .env
+            fi
+          }
           if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
-            touch .env
-            upsert_env() {
-              local key="$1"
-              local value="$2"
-              if grep -q "^${key}=" .env; then
-                python3 -c 'import sys; from pathlib import Path; key,value=sys.argv[1],sys.argv[2]; path=Path(".env"); lines=path.read_text(encoding="utf-8").splitlines(); path.write_text("\n".join((f"{key}={value}" if line.startswith(f"{key}=") else line) for line in lines) + "\n", encoding="utf-8")' "$key" "$value"
-              else
-                printf '%s=%s\n' "$key" "$value" >> .env
-              fi
-            }
             upsert_env MODEL_PROVIDER deepseek
             upsert_env DEEPSEEK_API_KEY "$DEEPSEEK_API_KEY"
             upsert_env DEEPSEEK_BASE_URL https://api.deepseek.com
@@ -40,6 +42,17 @@ jobs:
           else
             echo "DEEPSEEK_API_KEY GitHub secret is not set; using existing VM .env."
           fi
+          if [ -n "${ALLOWED_USERS:-}" ]; then
+            upsert_env ALLOWED_USERS "$ALLOWED_USERS"
+          fi
+          if [ -n "${DB_PASS:-}" ]; then
+            upsert_env DB_PASS "$DB_PASS"
+            DATABASE_URL="$(python3 -c 'import sys, urllib.parse; print("postgresql://aggasys:" + urllib.parse.quote(sys.argv[1], safe="") + "@postgres:5432/aggasys")' "$DB_PASS")"
+            upsert_env DATABASE_URL "$DATABASE_URL"
+          fi
+          upsert_env HERMES_TIMEZONE Asia/Singapore
+          upsert_env HERMES_GROUP_CHAT_MODE mention
+          upsert_env GRAY_BOT_USERNAME GrayBot
 
       - name: Run Gray/Hermes verification gates
         run: |
