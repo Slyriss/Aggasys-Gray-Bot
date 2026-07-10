@@ -6,6 +6,7 @@ from model_client import chat_completion, stream_completion
 from tools import run_tool, tools_description
 from prompts import SYSTEM_PROMPT
 from context_engine import get_context
+from log_safety import exception_type, safe_url_host, text_size
 from url_ingester import extract_urls, fetch_url_text
 
 logger = logging.getLogger(__name__)
@@ -103,7 +104,7 @@ async def _route(user_message: str) -> tuple:
                 params = decision.get("params", {})
                 return tool, params, _status_for(tool, params)
     except Exception as e:
-        logger.warning(f"Tool routing failed: {e}")
+        logger.warning("Tool routing failed: %s", exception_type(e))
     return None, {}, ""
 
 
@@ -130,7 +131,7 @@ async def _fetch_url_context(user_message: str) -> tuple[str, str]:
 
     context = f"[Web page: {title}]\nURL: {url}\n\n{truncated}"
     status = f"🌐 Reading: {title[:60]}..."
-    logger.info(f"URL context fetched: {url} ({len(text)} chars)")
+    logger.info("URL context fetched: host=%s chars=%s", safe_url_host(url), len(text))
     return status, context
 
 
@@ -149,9 +150,9 @@ async def run_agent(user_message: str, history: list, user_memory: list,
         try:
             result = await run_tool(tool_name, tool_params)
             tool_context = f"\n\n[{tool_name} result]:\n{result}"
-            logger.info(f"Tool {tool_name}: {result[:120]}")
+            logger.info("Tool %s completed: result_chars=%s", tool_name, text_size(result))
         except Exception as e:
-            logger.error(f"Tool {tool_name} failed: {e}")
+            logger.error("Tool %s failed: %s", tool_name, exception_type(e))
             status_text = None
     else:
         # Try URL fetching (only when no tool triggered)
@@ -167,7 +168,7 @@ async def run_agent(user_message: str, history: list, user_memory: list,
             if auto_context:
                 auto_context = f"\n\n[Relevant company knowledge]\n{auto_context}"
         except Exception as e:
-            logger.warning(f"Context retrieval failed: {e}")
+            logger.warning("Context retrieval failed: %s", exception_type(e))
 
     # Build system prompt — prepend conversation summary if available
     system = SYSTEM_PROMPT

@@ -244,9 +244,20 @@ def main() -> int:
         if marker not in policy:
             errors.append(f"bot/hermes/policy.py missing registry marker: {marker}")
     agent = _read("bot/agent.py")
-    for marker in ("Hermes routing rules", "Never invent tool names", "Do not route requests to spend money"):
+    for marker in (
+        "Hermes routing rules",
+        "Never invent tool names",
+        "Do not route requests to spend money",
+        "safe_url_host",
+        "result_chars",
+        "exception_type",
+    ):
         if marker not in agent:
             errors.append(f"bot/agent.py missing Hermes router guardrail marker: {marker}")
+    log_safety = _read("bot/log_safety.py")
+    for marker in ("def exception_type", "def safe_url_host", "def text_size", "urlparse"):
+        if marker not in log_safety:
+            errors.append(f"bot/log_safety.py missing log safety marker: {marker}")
     prompts = _read("bot/prompts.py")
     for marker in ("Hermes operating guardrails", "explicit approval through Hermes", "Supply ordering is intentionally not implemented yet"):
         if marker not in prompts:

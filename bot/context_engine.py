@@ -7,6 +7,7 @@ import os
 from embedding import embed_text
 from wiki import search_wiki
 from db import semantic_search_company_memory, text_search_company_memory
+from log_safety import exception_type
 
 logger = logging.getLogger(__name__)
 MAX_CONTEXT_CHARS = int(os.getenv("MAX_CONTEXT_CHARS", "1400"))
@@ -18,7 +19,7 @@ async def get_context(query: str) -> str:
     try:
         emb = await embed_text(query)
     except Exception as e:
-        logger.warning(f"Context engine embedding failed: {e}")
+        logger.warning("Context engine embedding failed: %s", exception_type(e))
 
     # Parallel retrieval
     wiki_results = await search_wiki(query, limit=2)
