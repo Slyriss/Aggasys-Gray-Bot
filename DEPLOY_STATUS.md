@@ -1,7 +1,7 @@
 # VM Deploy Status
 
-**Deployed:** Fri Jul 10 06:57:15 AM UTC 2026
-**Commit:** 0aa6c8b2f901145e2511cc10fa9ca1599d7a9be4
+**Deployed:** Fri Jul 10 07:08:54 AM UTC 2026
+**Commit:** 020e434cc5d95465a4b7979816821d7133d08f48
 
 ## Docker Services
 ```
@@ -69,12 +69,12 @@ TELEGRAM_TOKEN
 ## Gray/Hermes Verification Gates
 ```
 ............WARNING:main:Telegram Markdown rejected; retrying message as plain text.
-..........WARNING:main:Telegram Markdown rejected; retrying message as plain text.
-......................................................................................................................................INFO:url_ingester:Blocking URL host internal.example.com resolved to non-public address 192.168.1.10
+...........WARNING:main:Telegram Markdown rejected; retrying message as plain text.
+.......................................................................................................................................INFO:url_ingester:Blocking URL host internal.example.com resolved to non-public address 192.168.1.10
 ..INFO:url_ingester:Blocked unsafe URL redirect target: http://127.0.0.1/admin
 ..
 ----------------------------------------------------------------------
-Ran 160 tests in 0.864s
+Ran 162 tests in 0.662s
 
 OK
 Command surface verification OK
