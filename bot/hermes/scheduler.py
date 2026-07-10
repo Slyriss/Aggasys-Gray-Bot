@@ -61,6 +61,10 @@ def summary_recipient_tier(value: Any) -> str:
     return tier if tier in {"chat", "admins", "both"} else "chat"
 
 
+def _redact_delivery_error(exc: Exception) -> str:
+    return type(exc).__name__
+
+
 class HermesScheduler:
     def __init__(self, app, interval_seconds: int = HERMES_SCHEDULER_INTERVAL_SECONDS):
         self.app = app
@@ -261,13 +265,25 @@ class HermesScheduler:
             if recipient_tier in {"chat", "both"}:
                 await self.app.bot.send_message(chat_id=job["chat_id"], text=summary)
                 delivered_to.append("chat")
+            failed_admin_deliveries: list[dict[str, Any]] = []
             if recipient_tier in {"admins", "both"}:
                 for admin_id in configured_admin_user_ids():
-                    await self.app.bot.send_message(
-                        chat_id=admin_id,
-                        text=f"Standup summary from chat {job['chat_id']}:\n\n{summary}",
-                    )
-                delivered_to.append("admins")
+                    try:
+                        await self.app.bot.send_message(
+                            chat_id=admin_id,
+                            text=f"Standup summary from chat {job['chat_id']}:\n\n{summary}",
+                        )
+                        if "admins" not in delivered_to:
+                            delivered_to.append("admins")
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to deliver standup summary to admin %s: %s",
+                            admin_id,
+                            type(exc).__name__,
+                        )
+                        failed_admin_deliveries.append(
+                            {"admin_user_id": admin_id, "error_type": _redact_delivery_error(exc)}
+                        )
             await save_hermes_audit_log(
                 user_id=job.get("created_by"),
                 chat_id=job["chat_id"],
@@ -280,6 +296,7 @@ class HermesScheduler:
                     "standup_session_id": session_id,
                     "recipient_tier": recipient_tier,
                     "delivered_to": delivered_to,
+                    "failed_admin_deliveries": failed_admin_deliveries,
                 },
             )
             return

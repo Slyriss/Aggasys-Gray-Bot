@@ -231,7 +231,7 @@ def main() -> int:
         if marker not in db_py:
             errors.append(f"bot/db.py missing failed-job auto-pause marker: {marker}")
     scheduler = _read("bot/hermes/scheduler.py")
-    for marker in ("scheduled_job_auto_paused", "_audit_job_auto_paused"):
+    for marker in ("scheduled_job_auto_paused", "_audit_job_auto_paused", "failed_admin_deliveries"):
         if marker not in scheduler:
             errors.append(f"bot/hermes/scheduler.py missing auto-pause audit marker: {marker}")
     policy = _read("bot/hermes/policy.py")

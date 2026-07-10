@@ -13,19 +13,20 @@ from hermes.scheduler import HermesScheduler
 
 
 class FakeBot:
-    def __init__(self, fail_send=False):
+    def __init__(self, fail_send=False, fail_chat_ids=None):
         self.messages = []
         self.fail_send = fail_send
+        self.fail_chat_ids = set(fail_chat_ids or [])
 
     async def send_message(self, chat_id, text):
-        if self.fail_send:
+        if self.fail_send or chat_id in self.fail_chat_ids:
             raise RuntimeError("telegram send failed")
         self.messages.append({"chat_id": chat_id, "text": text})
 
 
 class FakeApp:
-    def __init__(self, fail_send=False):
-        self.bot = FakeBot(fail_send=fail_send)
+    def __init__(self, fail_send=False, fail_chat_ids=None):
+        self.bot = FakeBot(fail_send=fail_send, fail_chat_ids=fail_chat_ids)
 
 
 class FakeDb(types.ModuleType):
@@ -232,6 +233,54 @@ class HermesSchedulerIntegrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(fake_db.audits[0]["status"], "executed")
             self.assertEqual(fake_db.audits[0]["details"]["recipient_tier"], "both")
             self.assertEqual(fake_db.audits[0]["details"]["delivered_to"], ["chat", "admins"])
+            self.assertEqual(fake_db.audits[0]["details"]["failed_admin_deliveries"], [])
+        finally:
+            if previous_db is None:
+                sys.modules.pop("db", None)
+            else:
+                sys.modules["db"] = previous_db
+            if old_admins is None:
+                os.environ.pop("ADMIN_USERS", None)
+            else:
+                os.environ["ADMIN_USERS"] = old_admins
+
+    async def test_run_once_keeps_standup_summary_successful_when_one_admin_dm_fails(self):
+        fake_db = FakeDb()
+        fake_db.job = {
+            **fake_db.job,
+            "job_type": "standup_summary",
+            "payload": {"summary_recipients": "admins"},
+        }
+        fake_db.open_session = {
+            "id": 99,
+            "chat_id": -100,
+            "created_by": 123,
+            "participants": ["Alice", "Bob"],
+            "updates": {"Alice": "yesterday deployed, today testing, no blockers"},
+        }
+        previous_db = sys.modules.get("db")
+        old_admins = os.environ.get("ADMIN_USERS")
+        sys.modules["db"] = fake_db
+        os.environ["ADMIN_USERS"] = "123,456"
+        try:
+            app = FakeApp(fail_chat_ids={456})
+            scheduler = HermesScheduler(app=app)
+
+            with self.assertLogs("hermes.scheduler", level="WARNING") as logs:
+                ran = await scheduler.run_once()
+
+            self.assertEqual(ran, 1)
+            self.assertEqual(fake_db.failures, [])
+            self.assertEqual(len(fake_db.closed_sessions), 1)
+            self.assertEqual(len(fake_db.marked_runs), 1)
+            self.assertEqual([message["chat_id"] for message in app.bot.messages], [123])
+            self.assertTrue(any("Failed to deliver standup summary to admin 456" in line for line in logs.output))
+            self.assertEqual(fake_db.audits[0]["status"], "executed")
+            self.assertEqual(fake_db.audits[0]["details"]["delivered_to"], ["admins"])
+            self.assertEqual(
+                fake_db.audits[0]["details"]["failed_admin_deliveries"],
+                [{"admin_user_id": 456, "error_type": "RuntimeError"}],
+            )
         finally:
             if previous_db is None:
                 sys.modules.pop("db", None)
