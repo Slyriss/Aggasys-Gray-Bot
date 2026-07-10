@@ -478,7 +478,8 @@ async def forget_me_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     confirmed = context.args == ["CONFIRM"]
     if not confirmed:
         counts = await get_user_data_counts(user_id)
-        await update.message.reply_text(
+        await _reply_text(
+            update,
             "This will delete your personal Gray data and anonymize company-memory source links.\n\n"
             + "\n".join(_user_data_counts_lines(counts))
             + "\n\nRun `/forget_me CONFIRM` to proceed.",
@@ -522,7 +523,7 @@ async def wiki_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["📖 *Company Wiki*\n"]
     for p in pages:
         lines.append(f"• `{p['path']}` — {p['title']}")
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _reply_text(update, "\n".join(lines), parse_mode="Markdown")
 
 
 async def ingest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -569,7 +570,7 @@ async def lint_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     msg = await update.message.reply_text("🔍 Auditing wiki...")
     result = await lint_wiki()
-    await msg.edit_text(f"📋 *Wiki Audit*\n\n{result}", parse_mode="Markdown")
+    await _edit_text(msg, f"📋 *Wiki Audit*\n\n{result}", parse_mode="Markdown")
 
 
 async def note_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -606,10 +607,10 @@ async def recall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for n in notes:
             date = n["created_at"].strftime("%d %b %H:%M") if n.get("created_at") else ""
             lines.append(f"• [{date}] {n['content']}")
-        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        await _reply_text(update, "\n".join(lines), parse_mode="Markdown")
         return
 
-    msg = await update.message.reply_text(f"🔍 Searching for: _{query}_...", parse_mode="Markdown")
+    msg = await _reply_text(update, f"🔍 Searching for: _{query}_...", parse_mode="Markdown")
     lines = []
 
     try:
@@ -648,10 +649,10 @@ async def recall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 lines.append(f"  • {f}")
 
     if not lines:
-        await msg.edit_text(f"🔍 Nothing found for: _{query}_", parse_mode="Markdown")
+        await _edit_text(msg, f"🔍 Nothing found for: _{query}_", parse_mode="Markdown")
         return
 
-    await msg.edit_text("\n".join(lines), parse_mode="Markdown")
+    await _edit_text(msg, "\n".join(lines), parse_mode="Markdown")
 
 
 async def memory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -662,7 +663,7 @@ async def memory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🧠 No memories yet — they build up over time.")
         return
     lines = ["🧠 *What I remember about you:*\n"] + [f"• {f}" for f in facts]
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _reply_text(update, "\n".join(lines), parse_mode="Markdown")
 
 
 async def task_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -698,7 +699,7 @@ async def tasks_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         due = f" _(due: {t['due_text']})_" if t.get("due_text") else ""
         lines.append(f"• `#{t['id']}` {t['content']}{due}")
     lines.append("\nUse /done <id> to complete a task.")
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _reply_text(update, "\n".join(lines), parse_mode="Markdown")
 
 
 async def done_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -714,7 +715,7 @@ async def done_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines = ["Which task? Use /done <id>\n\n*Open tasks:*"]
         for t in tasks:
             lines.append(f"• `#{t['id']}` {t['content']}")
-        await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        await _reply_text(update, "\n".join(lines), parse_mode="Markdown")
         return
 
     task_id = int(args[0])
@@ -766,7 +767,7 @@ async def brief_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         summary_text = summary.replace("[Earlier conversation summary]\n", "")
         lines.append(summary_text[:400])
 
-    await msg.edit_text("\n".join(lines), parse_mode="Markdown")
+    await _edit_text(msg, "\n".join(lines), parse_mode="Markdown")
 
 
 def _jsonb_dict(value) -> dict:
@@ -809,7 +810,8 @@ async def _request_confirmation_if_needed(update: Update, decision) -> bool:
     if not decision.needs_confirmation:
         return False
     approval_id = await create_approval_from_decision(decision)
-    await update.message.reply_text(
+    await _reply_text(
+        update,
         f"{decision.confirmation_prompt}\n\n"
         f"Approval request: `#{approval_id}`\n"
         f"Use /approve {approval_id} or /deny {approval_id} <reason>.",
@@ -832,7 +834,7 @@ async def hermes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"• `{row['action_name']}` — {row['decision']} / {row['status']} "
             f"_{created}_"
         )
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _reply_text(update, "\n".join(lines), parse_mode="Markdown")
 
 
 async def hermes_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -859,7 +861,7 @@ async def hermes_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Pending approvals: `{approvals['pending']}`",
         f"Expired approvals: `{approvals['expired']}`",
     ]
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _reply_text(update, "\n".join(lines), parse_mode="Markdown")
 
 
 def _configured_state(value: str | None) -> str:
@@ -909,7 +911,7 @@ async def ops_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Pending approvals: `{approvals['pending']}`",
         f"Expired approvals: `{approvals['expired']}`",
     ]
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _reply_text(update, "\n".join(lines), parse_mode="Markdown")
 
 
 async def approvals_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -925,7 +927,7 @@ async def approvals_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for row in rows:
         lines.append(approval_summary(row))
     lines.append("\nUse /approve <id> or /deny <id> <reason>.")
-    await update.message.reply_text("\n\n".join(lines), parse_mode="Markdown")
+    await _reply_text(update, "\n\n".join(lines), parse_mode="Markdown")
 
 
 async def approve_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -957,7 +959,8 @@ async def approve_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ActionRisk.READ_ONLY,
         {"approval_id": approval_id, "approved_action": row["action_name"]},
     )
-    await update.message.reply_text(
+    await _reply_text(
+        update,
         f"✅ Approved Hermes request #{approval_id}: `{row['action_name']}`",
         parse_mode="Markdown",
     )
@@ -995,7 +998,8 @@ async def deny_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         {"approval_id": approval_id, "denied_action": row["action_name"], "reason": note},
     )
     suffix = f"\nReason: {note}" if note else ""
-    await update.message.reply_text(
+    await _reply_text(
+        update,
         f"⛔ Denied Hermes request #{approval_id}: `{row['action_name']}`{suffix}",
         parse_mode="Markdown",
     )
@@ -1342,7 +1346,7 @@ async def schedules_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"• `#{job['id']}` {job['job_type']} — {job['status']} "
             f"{job['schedule_kind']} {job['schedule_value']} next {next_run}{failure}{error}"
         )
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _reply_text(update, "\n".join(lines), parse_mode="Markdown")
 
 
 async def schedule_pause_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1516,7 +1520,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    await msg.edit_text(f"🎙️ _{text}_", parse_mode="Markdown")
+    await _edit_text(msg, f"🎙️ _{text}_", parse_mode="Markdown")
     try:
         await _process_text(update, update.effective_user.id, text)
     except Exception as e:
@@ -1534,7 +1538,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     caption = strip_bot_mention(update.message.caption or "", bot_username)
     if await _reject_oversize_upload(update, "document", getattr(doc, "file_size", None), MAX_DOCUMENT_BYTES):
         return
-    msg = await update.message.reply_text(f"📄 Processing *{doc.file_name}*...", parse_mode="Markdown")
+    msg = await _reply_text(update, f"📄 Processing *{doc.file_name}*...", parse_mode="Markdown")
 
     try:
         file = await doc.get_file()
@@ -1555,7 +1559,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif fname.endswith((".txt", ".md")):
             text = file_bytes.decode("utf-8", errors="replace")
         else:
-            await msg.edit_text(
+            await _edit_text(
+                msg,
                 f"⚠️ Unsupported: `{doc.file_name}`\n\nSupported: PDF, TXT, MD",
                 parse_mode="Markdown"
             )
@@ -1589,7 +1594,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     vision_model = os.getenv("VISION_MODEL", "")
 
     if not vision_model:
-        await update.message.reply_text(
+        await _reply_text(
+            update,
             "🖼️ Image received. Set `VISION_MODEL=llava` in .env to enable analysis.",
             parse_mode="Markdown"
         )
@@ -1621,7 +1627,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             resp.raise_for_status()
             description = resp.json()["message"]["content"]
 
-        await msg.edit_text(f"🖼️ *Image analysis:*\n\n{description}", parse_mode="Markdown")
+        await _edit_text(msg, f"🖼️ *Image analysis:*\n\n{description}", parse_mode="Markdown")
 
         user_id = update.effective_user.id
         await save_message(user_id, "user", f"[Image{': ' + caption if caption else ''}]")

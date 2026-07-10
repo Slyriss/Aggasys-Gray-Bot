@@ -214,6 +214,7 @@ def main() -> int:
         "_reject_oversize_upload", "upload_too_large:", "blocked_upload_size",
         "ops_status_cmd", "DeepSeek key: `{_configured_state",
         "telegram_error_handler", "add_error_handler", "telegram_handler_error", "handler_error",
+        "_send_text", "Telegram Markdown rejected", "_reply_text", "_edit_text",
         "close_db_pool", "await close_db_pool()",
         "forget_me_cmd", "self_service_deleted", "delete_user_data",
         "anonymized_after_self_service_delete",

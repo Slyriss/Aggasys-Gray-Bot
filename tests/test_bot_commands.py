@@ -76,11 +76,24 @@ from hermes import ActionDecision, ActionRisk, ActionStatus, HermesAction
 
 
 class FakeMessage:
-    def __init__(self):
+    def __init__(self, markdown_failures=0):
         self.replies = []
+        self.edits = []
+        self.markdown_failures = markdown_failures
 
     async def reply_text(self, text, **kwargs):
+        if kwargs.get("parse_mode") == "Markdown" and self.markdown_failures:
+            self.markdown_failures -= 1
+            raise BadRequest("Can't parse entities: can't find end of the entity")
         self.replies.append({"text": text, "kwargs": kwargs})
+        return self
+
+    async def edit_text(self, text, **kwargs):
+        if kwargs.get("parse_mode") == "Markdown" and self.markdown_failures:
+            self.markdown_failures -= 1
+            raise BadRequest("Can't parse entities: can't find end of the entity")
+        self.edits.append({"text": text, "kwargs": kwargs})
+        return self
 
 
 def fake_update(user_id=123, chat_id=-100):
@@ -123,6 +136,25 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("/forget_me", update.message.replies[0]["text"])
         self.assertIn("/standup_start", update.message.replies[0]["text"])
         self.assertNotIn("parse_mode", update.message.replies[0]["kwargs"])
+
+    async def test_reply_text_retries_markdown_parse_failure_as_plain_text(self):
+        update = fake_update(user_id=123)
+        update.message.markdown_failures = 1
+
+        await bot_main._reply_text(update, "bad _dynamic text", parse_mode="Markdown")
+
+        self.assertEqual(len(update.message.replies), 1)
+        self.assertEqual(update.message.replies[0]["text"], "bad _dynamic text")
+        self.assertNotIn("parse_mode", update.message.replies[0]["kwargs"])
+
+    async def test_edit_text_retries_markdown_parse_failure_as_plain_text(self):
+        message = FakeMessage(markdown_failures=1)
+
+        await bot_main._edit_text(message, "bad _dynamic edit", parse_mode="Markdown")
+
+        self.assertEqual(len(message.edits), 1)
+        self.assertEqual(message.edits[0]["text"], "bad _dynamic edit")
+        self.assertNotIn("parse_mode", message.edits[0]["kwargs"])
 
     async def test_standup_schedule_creates_daily_standup_job(self):
         update = fake_update(user_id=456)
