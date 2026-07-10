@@ -1,12 +1,12 @@
 # VM Deploy Status
 
-**Deployed:** Fri Jul 10 07:08:54 AM UTC 2026
-**Commit:** 020e434cc5d95465a4b7979816821d7133d08f48
+**Deployed:** Fri Jul 10 07:16:04 AM UTC 2026
+**Commit:** 0ed9776f644cd7b4ef175535f37b700dde939b28
 
 ## Docker Services
 ```
 NAME                     IMAGE                    COMMAND                  SERVICE    CREATED          STATUS                 PORTS
-aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        53 seconds ago   Up 50 seconds          
+aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        26 seconds ago   Up 23 seconds          
 aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   3 hours ago      Up 3 hours (healthy)   5432/tcp
 aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      3 hours ago      Up 3 hours (healthy)   6379/tcp
 ```
@@ -23,8 +23,6 @@ bot-1  | INFO:__main__:Admin role active: 1 user(s)
 bot-1  | INFO:__main__:Rate limit active: 30 messages per 60s
 bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/deleteWebhook "HTTP/1.1 200 OK"
 bot-1  | INFO:telegram.ext.Application:Application started
-bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/getUpdates "HTTP/1.1 200 OK"
-bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/getUpdates "HTTP/1.1 200 OK"
 bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/getUpdates "HTTP/1.1 200 OK"
 bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/getUpdates "HTTP/1.1 200 OK"
 ```
@@ -74,7 +72,7 @@ TELEGRAM_TOKEN
 ..INFO:url_ingester:Blocked unsafe URL redirect target: http://127.0.0.1/admin
 ..
 ----------------------------------------------------------------------
-Ran 162 tests in 0.662s
+Ran 162 tests in 0.666s
 
 OK
 Command surface verification OK
