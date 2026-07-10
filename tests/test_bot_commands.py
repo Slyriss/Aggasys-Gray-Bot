@@ -13,6 +13,14 @@ if BOT_DIR not in sys.path:
 
 telegram = types.ModuleType("telegram")
 telegram.Update = object
+telegram_error = types.ModuleType("telegram.error")
+
+
+class BadRequest(Exception):
+    pass
+
+
+telegram_error.BadRequest = BadRequest
 telegram_ext = types.ModuleType("telegram.ext")
 telegram_ext.ApplicationBuilder = object
 telegram_ext.MessageHandler = object
@@ -20,6 +28,7 @@ telegram_ext.CommandHandler = object
 telegram_ext.filters = SimpleNamespace(VOICE=object(), Document=SimpleNamespace(ALL=object()), PHOTO=object(), TEXT=object(), COMMAND=object())
 telegram_ext.ContextTypes = SimpleNamespace(DEFAULT_TYPE=object)
 sys.modules.setdefault("telegram", telegram)
+sys.modules.setdefault("telegram.error", telegram_error)
 sys.modules.setdefault("telegram.ext", telegram_ext)
 
 dotenv = types.ModuleType("dotenv")
@@ -148,6 +157,35 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args[4], "09:50")
         self.assertEqual(args[6], {})
         self.assertIn("Daily standup chase schedule #42", update.message.replies[0]["text"])
+
+    async def test_standup_summary_schedule_creates_summary_job_for_admins(self):
+        update = fake_update(user_id=456)
+        context = SimpleNamespace(args=["17:30", "admins"])
+
+        with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
+             patch.object(bot_main, "datetime_now", return_value=datetime(2026, 7, 9, 8, 0)), \
+             patch.object(bot_main, "create_hermes_job", AsyncMock(return_value=44)) as create_job:
+            await bot_main.standup_summary_schedule_cmd(update, context)
+
+        create_job.assert_awaited_once()
+        args = create_job.await_args.args
+        self.assertEqual(args[2], "standup_summary")
+        self.assertEqual(args[3], "daily")
+        self.assertEqual(args[4], "17:30")
+        self.assertEqual(args[6], {"summary_recipients": "admins"})
+        self.assertIn("Daily standup summary schedule #44", update.message.replies[0]["text"])
+        self.assertIn("Recipients: admins", update.message.replies[0]["text"])
+
+    async def test_standup_summary_schedule_defaults_to_chat_recipients(self):
+        update = fake_update(user_id=456)
+        context = SimpleNamespace(args=["17:30"])
+
+        with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
+             patch.object(bot_main, "datetime_now", return_value=datetime(2026, 7, 9, 8, 0)), \
+             patch.object(bot_main, "create_hermes_job", AsyncMock(return_value=45)) as create_job:
+            await bot_main.standup_summary_schedule_cmd(update, context)
+
+        self.assertEqual(create_job.await_args.args[6], {"summary_recipients": "chat"})
 
     async def test_monitor_schedule_creates_web_monitor_job(self):
         update = fake_update(user_id=123)

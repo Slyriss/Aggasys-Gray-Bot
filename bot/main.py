@@ -6,6 +6,7 @@ import time
 from functools import wraps
 from dotenv import load_dotenv
 from telegram import Update
+from telegram.error import BadRequest
 from telegram.ext import (
     ApplicationBuilder, MessageHandler, CommandHandler,
     filters, ContextTypes
@@ -36,7 +37,7 @@ from hermes import ActionRisk, ActionDecision, ActionStatus, HermesAction, Herme
 from hermes.audit import record_decision
 from hermes.approvals import approval_summary, create_approval_from_decision
 from hermes.chat_policy import should_process_message, strip_bot_mention
-from hermes.scheduler import HermesScheduler, next_daily_run, parse_daily_time
+from hermes.scheduler import HermesScheduler, next_daily_run, parse_daily_time, summary_recipient_tier
 from hermes.workflows import (
     looks_like_standup_update,
     missing_standup_participants,
@@ -248,6 +249,31 @@ def _safe_exc_info(error):
     return False
 
 
+def _is_markdown_parse_error(error: BadRequest) -> bool:
+    message = str(error).lower()
+    return "can't parse entities" in message or "can't find end of" in message
+
+
+async def _send_text(send_method, text: str, **kwargs):
+    try:
+        return await send_method(text, **kwargs)
+    except BadRequest as error:
+        if kwargs.get("parse_mode") == "Markdown" and _is_markdown_parse_error(error):
+            fallback_kwargs = dict(kwargs)
+            fallback_kwargs.pop("parse_mode", None)
+            logger.warning("Telegram Markdown rejected; retrying message as plain text.")
+            return await send_method(text, **fallback_kwargs)
+        raise
+
+
+async def _reply_text(update: Update, text: str, **kwargs):
+    return await _send_text(update.message.reply_text, text, **kwargs)
+
+
+async def _edit_text(message, text: str, **kwargs):
+    return await _send_text(message.edit_text, text, **kwargs)
+
+
 async def telegram_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     error = getattr(context, "error", None)
     error_type = type(error).__name__ if error else "UnknownError"
@@ -403,6 +429,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/standup_close — close and summarize standup\n"
         "/standup_schedule <HH:MM> <names> — schedule daily standup prompt\n"
         "/standup_chase_schedule <HH:MM> — schedule daily standup chasing\n"
+        "/standup_summary_schedule <HH:MM> [chat|admins|both] — schedule daily standup summary\n"
         "/monitor_schedule <HH:MM> <query> — schedule daily web monitoring\n"
         "/schedules — list Hermes schedules\n"
         "/schedule_pause <id> — pause a Hermes schedule\n"
@@ -1201,6 +1228,50 @@ async def standup_chase_schedule_cmd(update: Update, context: ContextTypes.DEFAU
     )
 
 
+async def standup_summary_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_operator(update):
+        return
+    if not context.args or len(context.args) > 2:
+        await update.message.reply_text("Usage: /standup_summary_schedule <HH:MM> [chat|admins|both]")
+        return
+    schedule_value = context.args[0]
+    recipient_tier = summary_recipient_tier(context.args[1] if len(context.args) == 2 else "chat")
+    try:
+        daily_at = parse_daily_time(schedule_value)
+    except ValueError as exc:
+        await update.message.reply_text(f"Invalid time: {exc}")
+        return
+    decision = await _decide_and_audit(
+        update,
+        "schedule_standup_summary",
+        "Create a recurring daily standup close-and-summary job.",
+        ActionRisk.LOW,
+        {"schedule_value": schedule_value, "summary_recipients": recipient_tier},
+    )
+    if await _request_confirmation_if_needed(update, decision):
+        return
+    if not decision.allowed:
+        await update.message.reply_text(f"Hermes blocked this summary schedule: {decision.reason}")
+        return
+    next_run_at = next_daily_run(datetime_now(), daily_at)
+    job_id = await create_hermes_job(
+        update.effective_chat.id,
+        update.effective_user.id,
+        "standup_summary",
+        "daily",
+        schedule_value,
+        next_run_at,
+        {"summary_recipients": recipient_tier},
+    )
+    await update.message.reply_text(
+        f"✅ Daily standup summary schedule #{job_id} created for {schedule_value}.\n"
+        f"Recipients: {recipient_tier}.\n"
+        f"Next summary: {next_run_at.strftime('%d %b %H:%M')}."
+    )
+
+
 async def monitor_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
         return
@@ -1605,6 +1676,7 @@ def main():
     app.add_handler(CommandHandler("standup_close", _rate_limited(standup_close_cmd)))
     app.add_handler(CommandHandler("standup_schedule", _rate_limited(standup_schedule_cmd)))
     app.add_handler(CommandHandler("standup_chase_schedule", _rate_limited(standup_chase_schedule_cmd)))
+    app.add_handler(CommandHandler("standup_summary_schedule", _rate_limited(standup_summary_schedule_cmd)))
     app.add_handler(CommandHandler("monitor_schedule", _rate_limited(monitor_schedule_cmd)))
     app.add_handler(CommandHandler("schedules", _rate_limited(schedules_cmd)))
     app.add_handler(CommandHandler("schedule_pause", _rate_limited(schedule_pause_cmd)))

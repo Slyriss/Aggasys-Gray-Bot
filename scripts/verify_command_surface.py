@@ -23,6 +23,7 @@ SMOKE_REQUIRED_COMMANDS = {
     "standup_chase_schedule",
     "standup_close",
     "standup_schedule",
+    "standup_summary_schedule",
     "standup_start",
     "standup_status",
     "standup_update",

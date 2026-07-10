@@ -27,6 +27,7 @@ class HermesPolicy:
         "standup_close",
         "schedule_daily_standup",
         "schedule_standup_chase",
+        "schedule_standup_summary",
         "schedule_web_monitor",
         "pause_schedule",
         "resume_schedule",

@@ -72,6 +72,7 @@ Use times a few minutes in the future:
 ```text
 /standup_schedule 09:30 Alice, Bob
 /standup_chase_schedule 09:50
+/standup_summary_schedule 17:30 both
 /monitor_schedule 10:00 Singapore SME AI tenders
 /schedules
 /schedule_pause <id>
@@ -81,7 +82,9 @@ Use times a few minutes in the future:
 
 Expected:
 
-- `/schedules` lists daily standup, chase, and monitor jobs.
+- `/schedules` lists daily standup, chase, summary, and monitor jobs.
+- The summary schedule closes the open standup and sends the final summary to
+  the configured tier: `chat`, `admins`, or `both`.
 - Pause, resume, and remove update schedule state without errors.
 - Scheduled jobs appear in `/hermes` audit after they run.
 - `/monitor_schedule`, `/schedule_pause`, `/schedule_resume`, and

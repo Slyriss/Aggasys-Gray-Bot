@@ -47,6 +47,7 @@ class FakeDb(types.ModuleType):
         self.sessions = []
         self.expired_calls = 0
         self.open_session = None
+        self.closed_sessions = []
 
     async def expire_hermes_approvals(self):
         self.expired_calls += 1
@@ -79,6 +80,15 @@ class FakeDb(types.ModuleType):
             "participants": participants,
         })
         return session_id
+
+    async def close_standup_session(self, chat_id, summary):
+        self.closed_sessions.append({"chat_id": chat_id, "summary": summary})
+        if not self.open_session:
+            return None
+        closed = dict(self.open_session)
+        closed["status"] = "closed"
+        closed["summary"] = summary
+        return closed
 
     async def save_hermes_audit_log(self, **kwargs):
         self.audits.append(kwargs)
@@ -182,6 +192,77 @@ class HermesSchedulerIntegrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.bot.messages, [])
             self.assertEqual(fake_db.audits[0]["status"], "skipped")
             self.assertEqual(fake_db.audits[0]["details"]["reason"], "all_updates_in")
+        finally:
+            if previous_db is None:
+                sys.modules.pop("db", None)
+            else:
+                sys.modules["db"] = previous_db
+
+    async def test_run_once_closes_standup_and_sends_summary_to_chat_and_admins(self):
+        fake_db = FakeDb()
+        fake_db.job = {
+            **fake_db.job,
+            "job_type": "standup_summary",
+            "payload": {"summary_recipients": "both"},
+        }
+        fake_db.open_session = {
+            "id": 99,
+            "chat_id": -100,
+            "created_by": 123,
+            "participants": ["Alice", "Bob"],
+            "updates": {"Alice": "yesterday deployed, today testing, no blockers"},
+        }
+        previous_db = sys.modules.get("db")
+        old_admins = os.environ.get("ADMIN_USERS")
+        sys.modules["db"] = fake_db
+        os.environ["ADMIN_USERS"] = "123,456"
+        try:
+            app = FakeApp()
+            scheduler = HermesScheduler(app=app)
+
+            ran = await scheduler.run_once()
+
+            self.assertEqual(ran, 1)
+            self.assertEqual(len(fake_db.closed_sessions), 1)
+            self.assertEqual(len(fake_db.marked_runs), 1)
+            self.assertEqual([message["chat_id"] for message in app.bot.messages], [-100, 123, 456])
+            self.assertIn("Alice", app.bot.messages[0]["text"])
+            self.assertIn("Standup summary from chat -100", app.bot.messages[1]["text"])
+            self.assertEqual(fake_db.audits[0]["action_name"], "scheduled_standup_summary")
+            self.assertEqual(fake_db.audits[0]["status"], "executed")
+            self.assertEqual(fake_db.audits[0]["details"]["recipient_tier"], "both")
+            self.assertEqual(fake_db.audits[0]["details"]["delivered_to"], ["chat", "admins"])
+        finally:
+            if previous_db is None:
+                sys.modules.pop("db", None)
+            else:
+                sys.modules["db"] = previous_db
+            if old_admins is None:
+                os.environ.pop("ADMIN_USERS", None)
+            else:
+                os.environ["ADMIN_USERS"] = old_admins
+
+    async def test_run_once_skips_standup_summary_without_open_session(self):
+        fake_db = FakeDb()
+        fake_db.job = {
+            **fake_db.job,
+            "job_type": "standup_summary",
+            "payload": {"summary_recipients": "admins"},
+        }
+        previous_db = sys.modules.get("db")
+        sys.modules["db"] = fake_db
+        try:
+            app = FakeApp()
+            scheduler = HermesScheduler(app=app)
+
+            ran = await scheduler.run_once()
+
+            self.assertEqual(ran, 1)
+            self.assertEqual(app.bot.messages, [])
+            self.assertEqual(fake_db.closed_sessions, [])
+            self.assertEqual(fake_db.audits[0]["action_name"], "scheduled_standup_summary")
+            self.assertEqual(fake_db.audits[0]["status"], "skipped")
+            self.assertEqual(fake_db.audits[0]["details"]["reason"], "no_open_standup")
         finally:
             if previous_db is None:
                 sys.modules.pop("db", None)

@@ -13,7 +13,8 @@ Supply ordering is intentionally not implemented yet.
 - Answer company-context questions through the existing memory and retrieval
   tools.
 - Run standups, collect updates, chase missing teammates, and post summaries.
-- Schedule daily standups, standup chases, and read-only web monitoring jobs.
+- Schedule daily standups, standup chases, standup summary delivery, and
+  read-only web monitoring jobs.
 - Gate risky actions behind Hermes policy and approval records.
 - Ignore ordinary group-chat chatter unless mentioned or replied to, depending
   on `HERMES_GROUP_CHAT_MODE`.
@@ -30,6 +31,18 @@ Supply ordering is intentionally not implemented yet.
 - `init.sql` and `migration.sql` create the memory, audit, approval, schedule,
   and standup tables.
 - `docker-compose.yml` runs the bot with Postgres/pgvector and Redis.
+
+## User Guide
+
+Use `docs/USER_GUIDE.md` as the operator/admin guide for pilot users. It covers
+member, operator, and admin tiers; daily chat usage; and the recommended
+automated standup setup:
+
+```text
+/standup_schedule 09:30 Alice, Bob, Charlie
+/standup_chase_schedule 09:50
+/standup_summary_schedule 17:30 both
+```
 
 ## Local Checks
 

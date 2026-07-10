@@ -11,6 +11,7 @@ from .workflows import (
     missing_standup_participants,
     parse_participants,
     standup_chase_message,
+    summarize_standup_updates,
 )
 from .monitoring import web_monitor_message
 
@@ -48,6 +49,16 @@ def standup_prompt(participants: list[str], session_id: int | None = None) -> st
         "Please post: yesterday, today, blockers.\n"
         "Use /standup_update <your update>."
     )
+
+
+def configured_admin_user_ids(raw: str | None = None) -> list[int]:
+    source = os.getenv("ADMIN_USERS", "") if raw is None else raw
+    return [int(uid.strip()) for uid in source.split(",") if uid.strip().isdigit()]
+
+
+def summary_recipient_tier(value: Any) -> str:
+    tier = str(value or "chat").strip().lower()
+    return tier if tier in {"chat", "admins", "both"} else "chat"
 
 
 class HermesScheduler:
@@ -216,6 +227,59 @@ class HermesScheduler:
                     "job_id": job["id"],
                     "standup_session_id": session["id"],
                     "missing": missing,
+                },
+            )
+            return
+        if job["job_type"] == "standup_summary":
+            from db import close_standup_session, get_open_standup_session, save_hermes_audit_log
+
+            payload = _jsonb_dict(job.get("payload"))
+            recipient_tier = summary_recipient_tier(payload.get("summary_recipients"))
+            session = await get_open_standup_session(job["chat_id"])
+            if not session:
+                await save_hermes_audit_log(
+                    user_id=job.get("created_by"),
+                    chat_id=job["chat_id"],
+                    action_name="scheduled_standup_summary",
+                    risk="low",
+                    decision="allowed",
+                    status="skipped",
+                    details={
+                        "job_id": job["id"],
+                        "recipient_tier": recipient_tier,
+                        "reason": "no_open_standup",
+                    },
+                )
+                return
+            updates = _jsonb_dict(session.get("updates"))
+            participants = list(session.get("participants") or [])
+            missing = missing_standup_participants(participants, updates)
+            summary = summarize_standup_updates(updates, missing)
+            closed = await close_standup_session(job["chat_id"], summary)
+            session_id = closed["id"] if closed else session["id"]
+            delivered_to: list[str] = []
+            if recipient_tier in {"chat", "both"}:
+                await self.app.bot.send_message(chat_id=job["chat_id"], text=summary)
+                delivered_to.append("chat")
+            if recipient_tier in {"admins", "both"}:
+                for admin_id in configured_admin_user_ids():
+                    await self.app.bot.send_message(
+                        chat_id=admin_id,
+                        text=f"Standup summary from chat {job['chat_id']}:\n\n{summary}",
+                    )
+                delivered_to.append("admins")
+            await save_hermes_audit_log(
+                user_id=job.get("created_by"),
+                chat_id=job["chat_id"],
+                action_name="scheduled_standup_summary",
+                risk="low",
+                decision="allowed",
+                status="executed",
+                details={
+                    "job_id": job["id"],
+                    "standup_session_id": session_id,
+                    "recipient_tier": recipient_tier,
+                    "delivered_to": delivered_to,
                 },
             )
             return
