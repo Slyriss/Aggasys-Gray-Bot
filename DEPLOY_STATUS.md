@@ -15,14 +15,14 @@ aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   red
 ```
 bot-1  | WARNING:__main__:Preflight: OLLAMA_URL points at localhost. In Docker Compose deploys use http://host.docker.internal:11434 so the bot container can reach host Ollama.
 bot-1  | INFO:__main__:Aggasys second brain starting...
-bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot8766422321:AAEJbEStFppP_sLR1epHaqedB5x3fISV4tE/getMe "HTTP/1.1 200 OK"
+bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/getMe "HTTP/1.1 200 OK"
 bot-1  | INFO:hermes.scheduler:Hermes scheduler started interval=30s
 bot-1  | INFO:__main__:Memory queue started workers=1
 bot-1  | INFO:__main__:Allowlist active: {1143441908}
 bot-1  | WARNING:hermes.scheduler:Hermes scheduler tick failed: password authentication failed for user "aggasys"
-bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot8766422321:AAEJbEStFppP_sLR1epHaqedB5x3fISV4tE/deleteWebhook "HTTP/1.1 200 OK"
+bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/deleteWebhook "HTTP/1.1 200 OK"
 bot-1  | INFO:telegram.ext.Application:Application started
-bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot8766422321:AAEJbEStFppP_sLR1epHaqedB5x3fISV4tE/getUpdates "HTTP/1.1 200 OK"
+bot-1  | INFO:httpx:HTTP Request: POST https://api.telegram.org/bot***/getUpdates "HTTP/1.1 200 OK"
 ```
 
 ## Model Backend

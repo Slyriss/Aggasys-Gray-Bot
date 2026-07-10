@@ -27,6 +27,13 @@ class BackupRestoreAssetTests(unittest.TestCase):
         self.assertIn("TRUNCATE hermes_audit_log", restore)
         self.assertIn("-v ON_ERROR_STOP=1", restore)
 
+    def test_sync_postgres_password_reads_env_and_hides_secret(self):
+        sync = (ROOT / "scripts" / "sync_postgres_password.sh").read_text(encoding="utf-8")
+
+        self.assertIn("DB_PASS=", sync)
+        self.assertIn("ALTER USER aggasys WITH PASSWORD", sync)
+        self.assertIn(">/dev/null", sync)
+
 
 if __name__ == "__main__":
     unittest.main()

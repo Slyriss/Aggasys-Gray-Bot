@@ -81,6 +81,7 @@ jobs:
             sleep 2
           done
           bash scripts/backup_hermes_data.sh backups
+          bash scripts/sync_postgres_password.sh .env
           docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U aggasys -d aggasys < migration.sql
 
       - name: Pull required Ollama models
@@ -130,7 +131,7 @@ jobs:
             echo "## Bot Logs (last 30 lines)"
             echo '```'
             docker compose logs bot --tail=30 2>&1 \
-              | sed 's/\(TOKEN\|PASSWORD\|PASS\|SECRET\)[=:][^ ]*/\1=***/gi'
+              | sed -E 's#bot[0-9]{6,12}:[A-Za-z0-9_-]{30,}#bot***#g; s#(TOKEN|PASSWORD|PASS|SECRET|KEY)[=:][^ ]+#\1=***#gi'
             echo '```'
             echo ""
             echo "## Model Backend"

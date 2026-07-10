@@ -73,7 +73,7 @@ if ((${#errors[@]} == 0)); then
   }
 
   if [ -f /tmp/gray-postdeploy-bot.log ]; then
-    if grep -E "Traceback|CRITICAL|Unhandled exception|SystemExit" /tmp/gray-postdeploy-bot.log >/dev/null 2>&1; then
+    if grep -E "Traceback|CRITICAL|ERROR|Unhandled exception|SystemExit|password authentication failed|Hermes scheduler tick failed" /tmp/gray-postdeploy-bot.log >/dev/null 2>&1; then
       errors+=("Bot logs contain a fatal-looking error. Run: docker compose logs bot -f")
     fi
     if ! grep -E "Aggasys second brain starting|Hermes scheduler started|Application started|polling" /tmp/gray-postdeploy-bot.log >/dev/null 2>&1; then
