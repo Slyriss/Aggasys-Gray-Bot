@@ -127,14 +127,13 @@ jobs:
       - name: Rebuild and restart bot
         run: |
           cd ~/aggasys-bot
-          docker compose up -d --build bot
+          bash scripts/deploy_bot_with_rollback.sh
 
       - name: Health check and publish VM status
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           cd ~/aggasys-bot
-          sleep 12
           bash scripts/check_post_deploy_health.sh
 
           # Collect live VM state — redact credentials

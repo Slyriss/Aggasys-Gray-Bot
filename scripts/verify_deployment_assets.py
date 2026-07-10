@@ -23,6 +23,7 @@ REQUIRED_FILES = [
     "scripts/check_hostinger_readiness.py",
     "scripts/check_vps_prereqs.sh",
     "scripts/check_post_deploy_health.sh",
+    "scripts/deploy_bot_with_rollback.sh",
     "scripts/create_env_from_example.py",
     "scripts/check_requirements_resolution.py",
     "scripts/check_in_venv.py",
@@ -64,7 +65,7 @@ REQUIRED_DEPLOY_SCRIPT_MARKERS = [
     "pg_isready -U aggasys -d aggasys",
     "bash scripts/backup_hermes_data.sh backups",
     "docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U aggasys -d aggasys < migration.sql",
-    "bash scripts/check_post_deploy_health.sh",
+    "bash scripts/deploy_bot_with_rollback.sh",
 ]
 
 REQUIRED_WORKFLOW_MARKERS = [
@@ -78,6 +79,7 @@ REQUIRED_WORKFLOW_MARKERS = [
     "bash scripts/backup_hermes_data.sh backups",
     "docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U aggasys -d aggasys < migration.sql",
     "bash scripts/check_post_deploy_health.sh",
+    "bash scripts/deploy_bot_with_rollback.sh",
     "python3 scripts/verify_deploy_status.py DEPLOY_STATUS.md",
     "upsert_env RATE_LIMIT_MESSAGES 30",
     "upsert_env RATE_LIMIT_WINDOW_SECONDS 60",
@@ -273,9 +275,13 @@ def main() -> int:
         if marker not in prereqs:
             errors.append(f"scripts/check_vps_prereqs.sh missing marker: {marker}")
     post_deploy = _read("scripts/check_post_deploy_health.sh")
-    for marker in ("bot/preflight.py --env-file .env", "docker compose ps --status running", "pg_isready", "redis-cli ping", "docker compose logs bot", "Post-deploy health check OK"):
+    for marker in ("--since", "bot/preflight.py --env-file .env", "docker compose ps --status running", "pg_isready", "redis-cli ping", "docker compose logs", "Post-deploy health check OK"):
         if marker not in post_deploy:
             errors.append(f"scripts/check_post_deploy_health.sh missing marker: {marker}")
+    rollback = _read("scripts/deploy_bot_with_rollback.sh")
+    for marker in ("ROLLBACK_IMAGE", "docker tag", "docker compose up -d --build bot", "check_post_deploy_health.sh --since", "docker compose up -d --no-build bot", "Rollback completed"):
+        if marker not in rollback:
+            errors.append(f"scripts/deploy_bot_with_rollback.sh missing rollback marker: {marker}")
     build_smoke = _read("scripts/docker_build_smoke.py")
     for marker in ("docker", "build", "bot/Dockerfile", "aggasys-gray-bot:smoke", "Docker engine is not reachable"):
         if marker not in build_smoke:

@@ -124,19 +124,12 @@ elif [ "$MODE" = "upgrade" ]; then
     info "Migration complete"
 fi
 
-# ── 6. Build and start ───────────────────────────────────────────
-info "Building Docker image and starting services..."
-docker compose up -d --build
-
-# ── 7. Verify ────────────────────────────────────────────────────
-info "Waiting for services to settle (15s)..."
-sleep 15
+# ── 6. Build, start, and verify ──────────────────────────────────
+info "Building Docker image and starting bot service with rollback protection..."
+bash scripts/deploy_bot_with_rollback.sh || error "Bot deploy failed. If rollback was available, the previous image was restored."
 
 info "Checking service health..."
 docker compose ps
-
-info "Running post-deploy health check..."
-bash scripts/check_post_deploy_health.sh || error "Post-deploy health check failed."
 
 echo ""
 if docker compose logs bot --tail=20 2>&1 | grep -q "Aggasys second brain starting\|polling"; then

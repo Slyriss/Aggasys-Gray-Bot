@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+LOG_SINCE_ARGS=()
+if [ "${1:-}" = "--since" ]; then
+  if [ -z "${2:-}" ]; then
+    echo "Usage: bash scripts/check_post_deploy_health.sh [--since seconds]" >&2
+    exit 2
+  fi
+  LOG_SINCE_ARGS=(--since "${2}s")
+fi
+
 errors=()
 warnings=()
 
@@ -68,7 +77,7 @@ if ((${#errors[@]} == 0)); then
     errors+=("Redis did not answer PONG.")
   fi
 
-  docker compose logs bot --tail=160 >/tmp/gray-postdeploy-bot.log 2>&1 || {
+  docker compose logs "${LOG_SINCE_ARGS[@]}" --tail=160 bot >/tmp/gray-postdeploy-bot.log 2>&1 || {
     errors+=("Could not read bot logs.")
   }
 
