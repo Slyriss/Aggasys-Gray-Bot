@@ -6,6 +6,9 @@ on:
     paths-ignore:
       - 'DEPLOY_STATUS.md'   # prevents the status-update commit from re-triggering deploy
 
+permissions:
+  contents: write
+
 jobs:
   deploy:
     runs-on: self-hosted
@@ -14,7 +17,7 @@ jobs:
       - name: Pull latest code
         run: |
           cd ~/aggasys-bot
-          git pull origin main
+          git pull --rebase origin main
 
       - name: Sync deployment secrets into VM env
         env:
@@ -105,6 +108,8 @@ jobs:
           docker compose up -d --build bot
 
       - name: Health check and publish VM status
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           cd ~/aggasys-bot
           sleep 12
@@ -169,5 +174,5 @@ jobs:
           git diff --staged --quiet || {
             git commit -m "Update deploy status [skip ci]"
             git pull --rebase origin main || true
-            git push origin main
+            git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
           }
