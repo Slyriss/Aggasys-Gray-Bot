@@ -387,7 +387,7 @@ async def post_shutdown(app):
 # ── Helpers ──────────────────────────────────────────────────────
 
 async def _stream_reply(update: Update, tool_status, stream) -> str:
-    placeholder = tool_status if tool_status else "..."
+    placeholder = tool_status if tool_status else "Loading..."
     sent = await update.message.reply_text(placeholder)
     full_reply = ""
     last_edit = time.monotonic() if not tool_status else 0.0
@@ -1571,6 +1571,63 @@ def datetime_now():
 
 # ── Message handlers ─────────────────────────────────────────────
 
+TEXT_COMMAND_HANDLERS = {
+    "start": start,
+    "help": start,
+    "clear": clear_cmd,
+    "forget_me": forget_me_cmd,
+    "wiki": wiki_cmd,
+    "ingest": ingest_cmd,
+    "lint": lint_cmd,
+    "note": note_cmd,
+    "recall": recall_cmd,
+    "memory": memory_cmd,
+    "task": task_cmd,
+    "tasks": tasks_cmd,
+    "done": done_cmd,
+    "brief": brief_cmd,
+    "hermes": hermes_cmd,
+    "hermes_status": hermes_status_cmd,
+    "ops_status": ops_status_cmd,
+    "approvals": approvals_cmd,
+    "approve": approve_cmd,
+    "deny": deny_cmd,
+    "standup_start": standup_start_cmd,
+    "standup_update": standup_update_cmd,
+    "standup_status": standup_status_cmd,
+    "standup_chase": standup_chase_cmd,
+    "standup_close": standup_close_cmd,
+    "standup_schedule": standup_schedule_cmd,
+    "standup_chase_schedule": standup_chase_schedule_cmd,
+    "standup_summary_schedule": standup_summary_schedule_cmd,
+    "monitor_schedule": monitor_schedule_cmd,
+    "schedules": schedules_cmd,
+    "schedule_pause": schedule_pause_cmd,
+    "schedule_resume": schedule_resume_cmd,
+    "schedule_remove": schedule_remove_cmd,
+}
+
+
+async def _maybe_dispatch_text_command(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
+    """Handle commands that arrive as mentioned text, e.g. '@Gray /ops_status'."""
+    stripped = text.strip()
+    if not stripped.startswith("/"):
+        return False
+    parts = stripped.split()
+    command = parts[0][1:].split("@", 1)[0].lower()
+    handler = TEXT_COMMAND_HANDLERS.get(command)
+    if not handler:
+        await update.message.reply_text(f"Unknown command: /{command}. Use /help for available commands.")
+        return True
+    previous_args = getattr(context, "args", None)
+    context.args = parts[1:]
+    try:
+        await handler(update, context)
+    finally:
+        context.args = previous_args
+    return True
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
         return
@@ -1578,6 +1635,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not should_process_message(update, bot_username=bot_username, bot_id=bot_id):
         return
     text = strip_bot_mention(update.message.text, bot_username)
+    if await _maybe_dispatch_text_command(update, context, text):
+        return
     if await _maybe_capture_standup_update(update, text):
         return
     try:

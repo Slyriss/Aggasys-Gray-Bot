@@ -445,6 +445,31 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Pending approvals: `3`", reply)
         self.assertNotIn("sk-secret-value-that-must-not-leak", reply)
 
+    async def test_mentioned_slash_command_dispatches_to_command_handler(self):
+        update = fake_update(user_id=123)
+        update.message.text = "@GrayBot /ops_status"
+        context = SimpleNamespace(args=None, bot=SimpleNamespace(username="GrayBot", id=999))
+
+        with patch.object(bot_main, "ops_status_cmd", AsyncMock()) as ops_status, \
+             patch.dict(bot_main.TEXT_COMMAND_HANDLERS, {"ops_status": ops_status}), \
+             patch.object(bot_main, "_process_text", AsyncMock()) as process_text:
+            await bot_main.handle_message(update, context)
+
+        ops_status.assert_awaited_once_with(update, context)
+        process_text.assert_not_awaited()
+        self.assertIsNone(context.args)
+
+    async def test_stream_reply_uses_loading_placeholder(self):
+        update = fake_update(user_id=123)
+
+        async def empty_stream():
+            if False:
+                yield ""
+
+        await bot_main._stream_reply(update, None, empty_stream())
+
+        self.assertEqual(update.message.replies[0]["text"], "Loading...")
+
     async def test_role_count_summary_does_not_expose_user_ids(self):
         summary = bot_main._role_count_summary({123456789, 987654321})
 
