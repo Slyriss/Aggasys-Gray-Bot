@@ -78,6 +78,66 @@ async def clear_conversation(user_id: int):
     await pool.execute("DELETE FROM conversation_summaries WHERE telegram_user_id = $1", user_id)
 
 
+async def get_user_data_counts(user_id: int) -> dict:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """SELECT
+             (SELECT COUNT(*) FROM conversations WHERE telegram_user_id = $1) AS conversations,
+             (SELECT COUNT(*) FROM conversation_summaries WHERE telegram_user_id = $1) AS summaries,
+             (SELECT COUNT(*) FROM user_memory WHERE telegram_user_id = $1) AS memory_facts,
+             (SELECT COUNT(*) FROM tasks WHERE telegram_user_id = $1) AS tasks,
+             (SELECT COUNT(*) FROM notes WHERE telegram_user_id = $1) AS notes,
+             (SELECT COUNT(*) FROM company_memory WHERE source_user_id = $1) AS company_memory_source_links""",
+        user_id,
+    )
+    return dict(row) if row else {
+        "conversations": 0,
+        "summaries": 0,
+        "memory_facts": 0,
+        "tasks": 0,
+        "notes": 0,
+        "company_memory_source_links": 0,
+    }
+
+
+async def delete_user_data(user_id: int) -> dict:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            conversations = await conn.execute(
+                "DELETE FROM conversations WHERE telegram_user_id = $1",
+                user_id,
+            )
+            summaries = await conn.execute(
+                "DELETE FROM conversation_summaries WHERE telegram_user_id = $1",
+                user_id,
+            )
+            memory = await conn.execute(
+                "DELETE FROM user_memory WHERE telegram_user_id = $1",
+                user_id,
+            )
+            tasks = await conn.execute(
+                "DELETE FROM tasks WHERE telegram_user_id = $1",
+                user_id,
+            )
+            notes = await conn.execute(
+                "DELETE FROM notes WHERE telegram_user_id = $1",
+                user_id,
+            )
+            source_links = await conn.execute(
+                "UPDATE company_memory SET source_user_id = NULL WHERE source_user_id = $1",
+                user_id,
+            )
+    return {
+        "conversations": _row_count(conversations),
+        "summaries": _row_count(summaries),
+        "memory_facts": _row_count(memory),
+        "tasks": _row_count(tasks),
+        "notes": _row_count(notes),
+        "company_memory_source_links": _row_count(source_links),
+    }
+
+
 async def get_conversation_count(user_id: int) -> int:
     pool = await get_pool()
     return await pool.fetchval(

@@ -98,6 +98,7 @@ FORBIDDEN_DEPLOY_MARKERS = [
 ]
 
 REQUIRED_COMMAND_MARKERS = [
+    "forget_me",
     "ops_status",
     "standup_chase_schedule",
     "monitor_schedule",
@@ -212,6 +213,7 @@ def main() -> int:
         "ops_status_cmd", "DeepSeek key: `{_configured_state",
         "telegram_error_handler", "add_error_handler", "telegram_handler_error", "handler_error",
         "close_db_pool", "await close_db_pool()",
+        "forget_me_cmd", "self_service_deleted", "delete_user_data",
         "Restricted to Gray admins", "Restricted to Gray operators",
     ):
         if marker not in main_py:
@@ -221,7 +223,7 @@ def main() -> int:
             errors.append(f"bot/main.py missing command marker: {marker}")
 
     db_py = _read("bot/db.py")
-    for marker in ("HERMES_JOB_FAILURE_LIMIT", "status = CASE", "consecutive_failures + 1 >= $3", "RETURNING id, chat_id", "get_hermes_retention_counts", "prune_hermes_retention", "status IN ('approved', 'denied', 'expired')", "status IN ('removed', 'paused')", "status = 'closed'", "async def close_pool", "await _pool.close()", "_pool = None"):
+    for marker in ("HERMES_JOB_FAILURE_LIMIT", "status = CASE", "consecutive_failures + 1 >= $3", "RETURNING id, chat_id", "get_hermes_retention_counts", "prune_hermes_retention", "status IN ('approved', 'denied', 'expired')", "status IN ('removed', 'paused')", "status = 'closed'", "async def close_pool", "await _pool.close()", "_pool = None", "get_user_data_counts", "delete_user_data", "UPDATE company_memory SET source_user_id = NULL WHERE source_user_id = $1"):
         if marker not in db_py:
             errors.append(f"bot/db.py missing failed-job auto-pause marker: {marker}")
     scheduler = _read("bot/hermes/scheduler.py")
@@ -258,6 +260,7 @@ def main() -> int:
     for marker in (
         "/hermes_status",
         "/ops_status",
+        "/forget_me",
         "/standup_schedule",
         "/standup_chase_schedule",
         "/monitor_schedule",
@@ -299,6 +302,7 @@ def main() -> int:
         "The best time to deploy",
         "docs/TELEGRAM_SMOKE_TEST.md",
         "/ops_status",
+        "/forget_me",
         "telegram_handler_error",
         "URL reading rejects localhost",
         "scripts/prune_hermes_data.py",

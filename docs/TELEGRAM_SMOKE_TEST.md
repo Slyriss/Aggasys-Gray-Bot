@@ -31,6 +31,7 @@ Send these to Gray in a private chat:
 /task smoke test task
 /tasks
 /brief
+/forget_me
 ```
 
 Expected:
@@ -39,6 +40,9 @@ Expected:
 - `/hermes_status` shows scheduler `running`.
 - `/ops_status` shows redacted model, role, rate-limit, upload-limit, backup,
   scheduler, and approval state without showing API keys or tokens.
+- `/forget_me` previews personal data counts and asks for exact confirmation;
+  do not run `/forget_me CONFIRM` during a smoke test unless deleting that test
+  account's personal Gray data is intended.
 - Note, recall, task, tasks, and brief all answer without errors.
 
 ## Standup Workflow

@@ -33,6 +33,7 @@ sys.modules.setdefault("agent", agent)
 db = types.ModuleType("db")
 for name in [
     "get_conversation_history", "save_message", "get_user_memory", "clear_conversation",
+    "get_user_data_counts", "delete_user_data",
     "save_note", "get_recent_notes", "search_notes", "save_task", "get_open_tasks",
     "complete_task", "get_all_tasks", "get_conversation_count", "create_standup_session",
     "get_open_standup_session", "save_standup_update", "close_standup_session",
@@ -272,6 +273,52 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Scheduler: `running`", reply)
         self.assertIn("Pending approvals: `3`", reply)
         self.assertNotIn("sk-secret-value-that-must-not-leak", reply)
+
+    async def test_forget_me_without_confirmation_shows_counts_only(self):
+        update = fake_update(user_id=123)
+        context = SimpleNamespace(args=[])
+        counts = {
+            "conversations": 2,
+            "summaries": 1,
+            "memory_facts": 3,
+            "tasks": 4,
+            "notes": 5,
+            "company_memory_source_links": 6,
+        }
+
+        with patch.object(bot_main, "get_user_data_counts", AsyncMock(return_value=counts)) as get_counts, \
+             patch.object(bot_main, "delete_user_data", AsyncMock()) as delete_data:
+            await bot_main.forget_me_cmd(update, context)
+
+        get_counts.assert_awaited_once_with(123)
+        delete_data.assert_not_awaited()
+        reply = update.message.replies[0]["text"]
+        self.assertIn("Run `/forget_me CONFIRM`", reply)
+        self.assertIn("Notes: 5", reply)
+
+    async def test_forget_me_confirm_deletes_and_audits(self):
+        update = fake_update(user_id=123)
+        context = SimpleNamespace(args=["CONFIRM"])
+        deleted = {
+            "conversations": 2,
+            "summaries": 1,
+            "memory_facts": 3,
+            "tasks": 4,
+            "notes": 5,
+            "company_memory_source_links": 6,
+        }
+
+        with patch.object(bot_main, "delete_user_data", AsyncMock(return_value=deleted)) as delete_data, \
+             patch.object(bot_main, "record_decision", AsyncMock()) as record:
+            await bot_main.forget_me_cmd(update, context)
+
+        delete_data.assert_awaited_once_with(123)
+        record.assert_awaited_once()
+        decision = record.await_args.args[0]
+        self.assertEqual(decision.action.name, "delete_data")
+        self.assertEqual(decision.action.params["scope"], "self_service_user_data")
+        self.assertEqual(record.await_args.kwargs["status"], "self_service_deleted")
+        self.assertIn("personal Gray data has been deleted", update.message.replies[0]["text"])
 
 
 class RateLimitTests(unittest.IsolatedAsyncioTestCase):

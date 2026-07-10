@@ -14,6 +14,7 @@ from agent import run_agent
 from db import (
     get_conversation_history, save_message,
     get_user_memory, clear_conversation,
+    get_user_data_counts, delete_user_data,
     save_note, get_recent_notes, search_notes,
     save_task, get_open_tasks, complete_task, get_all_tasks,
     get_conversation_count, SUMMARY_TRIGGER_MESSAGES,
@@ -420,6 +421,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/ingest <text or url> — add to company wiki\n"
         "/lint — audit wiki for gaps\n"
         "/clear — clear conversation history\n"
+        "/forget_me — delete your stored personal data\n"
         "/help — this message",
         parse_mode="Markdown"
     )
@@ -430,6 +432,55 @@ async def clear_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await clear_conversation(update.effective_user.id)
     await update.message.reply_text("✅ Conversation history cleared.")
+
+
+def _user_data_counts_lines(counts: dict) -> list[str]:
+    return [
+        f"Conversations: {counts.get('conversations', 0)}",
+        f"Summaries: {counts.get('summaries', 0)}",
+        f"Memory facts: {counts.get('memory_facts', 0)}",
+        f"Tasks: {counts.get('tasks', 0)}",
+        f"Notes: {counts.get('notes', 0)}",
+        f"Company-memory source links to anonymize: {counts.get('company_memory_source_links', 0)}",
+    ]
+
+
+async def forget_me_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_allowed(update.effective_user.id):
+        return
+    user_id = update.effective_user.id
+    confirmed = context.args == ["CONFIRM"]
+    if not confirmed:
+        counts = await get_user_data_counts(user_id)
+        await update.message.reply_text(
+            "This will delete your personal Gray data and anonymize company-memory source links.\n\n"
+            + "\n".join(_user_data_counts_lines(counts))
+            + "\n\nRun `/forget_me CONFIRM` to proceed.",
+            parse_mode="Markdown",
+        )
+        return
+
+    deleted = await delete_user_data(user_id)
+    decision = ActionDecision(
+        status=ActionStatus.ALLOWED,
+        reason="User explicitly confirmed self-service personal data deletion.",
+        action=HermesAction(
+            name="delete_data",
+            description="Self-service deletion of a user's personal Gray data.",
+            actor_user_id=user_id,
+            chat_id=update.effective_chat.id,
+            risk=ActionRisk.MEDIUM,
+            params={
+                "scope": "self_service_user_data",
+                "deleted": deleted,
+            },
+        ),
+    )
+    await record_decision(decision, status="self_service_deleted")
+    await update.message.reply_text(
+        "✅ Your personal Gray data has been deleted.\n\n"
+        + "\n".join(_user_data_counts_lines(deleted))
+    )
 
 
 async def wiki_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1530,6 +1581,7 @@ def main():
     app.add_handler(CommandHandler("start", _rate_limited(start)))
     app.add_handler(CommandHandler("help", _rate_limited(start)))
     app.add_handler(CommandHandler("clear", _rate_limited(clear_cmd)))
+    app.add_handler(CommandHandler("forget_me", _rate_limited(forget_me_cmd)))
     app.add_handler(CommandHandler("wiki", _rate_limited(wiki_cmd)))
     app.add_handler(CommandHandler("ingest", _rate_limited(ingest_cmd)))
     app.add_handler(CommandHandler("lint", _rate_limited(lint_cmd)))

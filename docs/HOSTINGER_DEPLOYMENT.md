@@ -225,6 +225,7 @@ In Telegram:
 - `/start`
 - `/hermes_status`
 - `/ops_status`
+- `/forget_me`
 - `/standup_schedule 09:30 Alice, Bob`
 - `/standup_chase_schedule 09:50`
 - `/monitor_schedule 10:00 Singapore SME AI tenders`
@@ -242,6 +243,9 @@ Expected:
 - `/hermes_status` shows scheduler `running`.
 - `/ops_status` shows redacted model, role, rate-limit, upload-limit, backup,
   scheduler, and approval state without exposing tokens or API keys.
+- `/forget_me` previews personal data counts and asks for exact confirmation;
+  do not run `/forget_me CONFIRM` unless deleting that account's personal Gray
+  data is intended.
 - `/schedules` shows the daily standup, chase, and monitor jobs.
 - `/standup_chase` reminds only missing participants when a standup is open.
 - The monitor posts read-only web search results at the scheduled time.

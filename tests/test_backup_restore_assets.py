@@ -57,6 +57,18 @@ class BackupRestoreAssetTests(unittest.TestCase):
         self.assertIn("status = 'closed'", db)
         self.assertIn("completed_at < NOW()", db)
 
+    def test_db_self_service_delete_removes_personal_rows_and_anonymizes_company_memory(self):
+        db = (ROOT / "bot" / "db.py").read_text(encoding="utf-8")
+
+        self.assertIn("get_user_data_counts", db)
+        self.assertIn("delete_user_data", db)
+        self.assertIn("DELETE FROM conversations WHERE telegram_user_id = $1", db)
+        self.assertIn("DELETE FROM conversation_summaries WHERE telegram_user_id = $1", db)
+        self.assertIn("DELETE FROM user_memory WHERE telegram_user_id = $1", db)
+        self.assertIn("DELETE FROM tasks WHERE telegram_user_id = $1", db)
+        self.assertIn("DELETE FROM notes WHERE telegram_user_id = $1", db)
+        self.assertIn("UPDATE company_memory SET source_user_id = NULL WHERE source_user_id = $1", db)
+
 
 if __name__ == "__main__":
     unittest.main()

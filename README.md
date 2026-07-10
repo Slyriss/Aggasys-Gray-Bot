@@ -142,6 +142,8 @@ container startup, and post-deploy health checks.
 - URL reading rejects localhost, private/link-local IPs, unsafe DNS resolutions,
   private redirects, oversized responses, and non-HTTP(S) schemes before content
   is injected into Gray's context.
+- `/forget_me` lets an allowed user preview and then explicitly confirm deletion
+  of their personal Gray data while anonymizing company-memory source links.
 - `scripts/prune_hermes_data.py` gives ops a dry-run-first retention path for
   old audit rows, resolved approvals, inactive jobs, and closed standups using
   `HERMES_AUDIT_RETENTION_DAYS` and `HERMES_OPERATION_RETENTION_DAYS`.
