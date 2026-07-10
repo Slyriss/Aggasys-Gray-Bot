@@ -1,13 +1,13 @@
 # VM Deploy Status
 
-**Deployed:** Fri Jul 10 05:18:19 AM UTC 2026
-**Commit:** 159d5473b5e9c9312cfeeb5000b74dc357f4231e
+**Deployed:** Fri Jul 10 05:23:04 AM UTC 2026
+**Commit:** 34f0055097bff50892d58d406807108cb9306f78
 
 ## Docker Services
 ```
 NAME                     IMAGE                    COMMAND                  SERVICE    CREATED             STATUS                       PORTS
-aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        22 seconds ago      Up 20 seconds                
-aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   About an hour ago   Up About an hour (healthy)   5432/tcp
+aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        22 seconds ago      Up 19 seconds                
+aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   2 hours ago         Up 2 hours (healthy)         5432/tcp
 aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      About an hour ago   Up About an hour (healthy)   6379/tcp
 ```
 
@@ -65,11 +65,11 @@ TELEGRAM_TOKEN
 
 ## Gray/Hermes Verification Gates
 ```
-......................................................................................................................................INFO:url_ingester:Blocking URL host internal.example.com resolved to non-public address 192.168.1.10
+........................................................................................................................................INFO:url_ingester:Blocking URL host internal.example.com resolved to non-public address 192.168.1.10
 ..INFO:url_ingester:Blocked unsafe URL redirect target: http://127.0.0.1/admin
 ..
 ----------------------------------------------------------------------
-Ran 138 tests in 0.552s
+Ran 140 tests in 0.772s
 
 OK
 Command surface verification OK
