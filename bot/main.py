@@ -783,6 +783,20 @@ def _jsonb_dict(value) -> dict:
     return {}
 
 
+def _matching_active_schedule(jobs: list[dict], job_type: str, schedule_value: str) -> dict | None:
+    normalized_time = schedule_value.strip()
+    for job in jobs:
+        if job.get("status") != "active":
+            continue
+        if job.get("job_type") != job_type:
+            continue
+        if job.get("schedule_kind") != "daily":
+            continue
+        if str(job.get("schedule_value") or "").strip() == normalized_time:
+            return job
+    return None
+
+
 def _display_name(update: Update) -> str:
     user = update.effective_user
     if user.username:
@@ -1174,6 +1188,16 @@ async def standup_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
     if not decision.allowed:
         await update.message.reply_text(f"Hermes blocked this schedule: {decision.reason}")
         return
+    existing_job = _matching_active_schedule(
+        await get_hermes_jobs(update.effective_chat.id, limit=100),
+        "daily_standup",
+        schedule_value,
+    )
+    if existing_job:
+        await update.message.reply_text(
+            f"Daily standup schedule already exists as #{existing_job['id']} for {schedule_value}."
+        )
+        return
     next_run_at = next_daily_run(datetime_now(), daily_at)
     job_id = await create_hermes_job(
         update.effective_chat.id,
@@ -1215,6 +1239,16 @@ async def standup_chase_schedule_cmd(update: Update, context: ContextTypes.DEFAU
         return
     if not decision.allowed:
         await update.message.reply_text(f"Hermes blocked this chase schedule: {decision.reason}")
+        return
+    existing_job = _matching_active_schedule(
+        await get_hermes_jobs(update.effective_chat.id, limit=100),
+        "standup_chase",
+        schedule_value,
+    )
+    if existing_job:
+        await update.message.reply_text(
+            f"Daily standup chase schedule already exists as #{existing_job['id']} for {schedule_value}."
+        )
         return
     next_run_at = next_daily_run(datetime_now(), daily_at)
     job_id = await create_hermes_job(
@@ -1259,6 +1293,16 @@ async def standup_summary_schedule_cmd(update: Update, context: ContextTypes.DEF
     if not decision.allowed:
         await update.message.reply_text(f"Hermes blocked this summary schedule: {decision.reason}")
         return
+    existing_job = _matching_active_schedule(
+        await get_hermes_jobs(update.effective_chat.id, limit=100),
+        "standup_summary",
+        schedule_value,
+    )
+    if existing_job:
+        await update.message.reply_text(
+            f"Daily standup summary schedule already exists as #{existing_job['id']} for {schedule_value}."
+        )
+        return
     next_run_at = next_daily_run(datetime_now(), daily_at)
     job_id = await create_hermes_job(
         update.effective_chat.id,
@@ -1302,6 +1346,16 @@ async def monitor_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     if not decision.allowed:
         await update.message.reply_text(f"Hermes blocked this monitor schedule: {decision.reason}")
+        return
+    existing_job = _matching_active_schedule(
+        await get_hermes_jobs(update.effective_chat.id, limit=100),
+        "web_monitor",
+        schedule_value,
+    )
+    if existing_job:
+        await update.message.reply_text(
+            f"Daily web monitor schedule already exists as #{existing_job['id']} for {schedule_value}."
+        )
         return
     next_run_at = next_daily_run(datetime_now(), daily_at)
     job_id = await create_hermes_job(

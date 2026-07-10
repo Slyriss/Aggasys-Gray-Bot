@@ -162,6 +162,7 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
              patch.object(bot_main, "datetime_now", return_value=datetime(2026, 7, 9, 8, 0)), \
+             patch.object(bot_main, "get_hermes_jobs", AsyncMock(return_value=[])), \
              patch.object(bot_main, "create_hermes_job", AsyncMock(return_value=41)) as create_job:
             await bot_main.standup_schedule_cmd(update, context)
 
@@ -173,12 +174,32 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args[6], {"participants": ["Alice", "Bob"]})
         self.assertIn("Daily standup schedule #41", update.message.replies[0]["text"])
 
+    async def test_standup_schedule_reuses_existing_active_schedule(self):
+        update = fake_update(user_id=456)
+        context = SimpleNamespace(args=["09:30", "Alice,", "Bob"])
+        existing = [{
+            "id": 41,
+            "status": "active",
+            "job_type": "daily_standup",
+            "schedule_kind": "daily",
+            "schedule_value": "09:30",
+        }]
+
+        with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
+             patch.object(bot_main, "get_hermes_jobs", AsyncMock(return_value=existing)), \
+             patch.object(bot_main, "create_hermes_job", AsyncMock()) as create_job:
+            await bot_main.standup_schedule_cmd(update, context)
+
+        create_job.assert_not_awaited()
+        self.assertEqual(update.message.replies[0]["text"], "Daily standup schedule already exists as #41 for 09:30.")
+
     async def test_standup_chase_schedule_creates_chase_job(self):
         update = fake_update(user_id=456)
         context = SimpleNamespace(args=["09:50"])
 
         with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
              patch.object(bot_main, "datetime_now", return_value=datetime(2026, 7, 9, 8, 0)), \
+             patch.object(bot_main, "get_hermes_jobs", AsyncMock(return_value=[])), \
              patch.object(bot_main, "create_hermes_job", AsyncMock(return_value=42)) as create_job:
             await bot_main.standup_chase_schedule_cmd(update, context)
 
@@ -196,6 +217,7 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
              patch.object(bot_main, "datetime_now", return_value=datetime(2026, 7, 9, 8, 0)), \
+             patch.object(bot_main, "get_hermes_jobs", AsyncMock(return_value=[])), \
              patch.object(bot_main, "create_hermes_job", AsyncMock(return_value=44)) as create_job:
             await bot_main.standup_summary_schedule_cmd(update, context)
 
@@ -214,6 +236,7 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
              patch.object(bot_main, "datetime_now", return_value=datetime(2026, 7, 9, 8, 0)), \
+             patch.object(bot_main, "get_hermes_jobs", AsyncMock(return_value=[])), \
              patch.object(bot_main, "create_hermes_job", AsyncMock(return_value=45)) as create_job:
             await bot_main.standup_summary_schedule_cmd(update, context)
 
@@ -225,6 +248,7 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
              patch.object(bot_main, "datetime_now", return_value=datetime(2026, 7, 9, 8, 0)), \
+             patch.object(bot_main, "get_hermes_jobs", AsyncMock(return_value=[])), \
              patch.object(bot_main, "create_hermes_job", AsyncMock(return_value=43)) as create_job:
             await bot_main.monitor_schedule_cmd(update, context)
 
@@ -235,6 +259,25 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args[4], "10:00")
         self.assertEqual(args[6], {"query": "Singapore SME AI tenders"})
         self.assertIn("Daily web monitor #43", update.message.replies[0]["text"])
+
+    async def test_monitor_schedule_reuses_existing_active_schedule(self):
+        update = fake_update(user_id=123)
+        context = SimpleNamespace(args=["10:00", "Singapore", "SME", "AI", "tenders"])
+        existing = [{
+            "id": 43,
+            "status": "active",
+            "job_type": "web_monitor",
+            "schedule_kind": "daily",
+            "schedule_value": "10:00",
+        }]
+
+        with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
+             patch.object(bot_main, "get_hermes_jobs", AsyncMock(return_value=existing)), \
+             patch.object(bot_main, "create_hermes_job", AsyncMock()) as create_job:
+            await bot_main.monitor_schedule_cmd(update, context)
+
+        create_job.assert_not_awaited()
+        self.assertEqual(update.message.replies[0]["text"], "Daily web monitor schedule already exists as #43 for 10:00.")
 
     async def test_monitor_schedule_rejects_missing_query(self):
         update = fake_update(user_id=123)

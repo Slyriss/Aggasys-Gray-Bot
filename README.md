@@ -44,6 +44,9 @@ automated standup setup:
 /standup_summary_schedule 17:30 both
 ```
 
+Gray refuses to create a duplicate recurring job for the same chat, job type,
+and daily time; it shows the existing schedule ID instead.
+
 ## Local Checks
 
 Run the standard gate:

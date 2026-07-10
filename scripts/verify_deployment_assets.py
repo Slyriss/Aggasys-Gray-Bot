@@ -219,6 +219,7 @@ def main() -> int:
         "forget_me_cmd", "self_service_deleted", "delete_user_data",
         "anonymized_after_self_service_delete",
         "Restricted to Gray admins", "Restricted to Gray operators",
+        "_matching_active_schedule", "already exists as #",
     ):
         if marker not in main_py:
             errors.append(f"bot/main.py missing RBAC marker: {marker}")
@@ -309,6 +310,7 @@ def main() -> int:
         "docs/USER_GUIDE.md",
         "/ops_status",
         "/forget_me",
+        "duplicate recurring job",
         "telegram_handler_error",
         "URL reading rejects localhost",
         "scripts/prune_hermes_data.py",

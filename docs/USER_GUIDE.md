@@ -115,6 +115,9 @@ View and manage scheduled jobs:
 
 Only admins can pause, resume, or remove schedules.
 
+If the same daily schedule already exists in the chat, Gray will reuse it and
+show the existing schedule ID instead of creating a duplicate recurring job.
+
 ## Company Knowledge
 
 Admins can update the wiki:
