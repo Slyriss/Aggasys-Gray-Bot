@@ -41,7 +41,8 @@ class SecretHygieneTests(unittest.TestCase):
             root = Path(tmp)
             (root / ".env").write_text("TELEGRAM_TOKEN=123456789:replace_with_bot_token\n", encoding="utf-8")
 
-            findings = scan_repository(root)
+            with patch.dict(os.environ, {"ALLOW_WORKSPACE_ENV": ""}):
+                findings = scan_repository(root)
 
             self.assertTrue(any("Real .env file" in finding.message for finding in findings))
 
