@@ -29,8 +29,7 @@ for attempt in $(seq 1 30); do
   sleep 2
 done
 
-existing_tables=$(docker compose exec -T postgres psql -U aggasys -d aggasys -tAc \
-  -v ON_ERROR_STOP=1 \
+existing_tables=$(docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U aggasys -d aggasys -tAc \
   "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename IN ('hermes_audit_log','hermes_approval_requests','hermes_jobs','standup_sessions') ORDER BY tablename;")
 
 if [ -z "${existing_tables//[[:space:]]/}" ]; then

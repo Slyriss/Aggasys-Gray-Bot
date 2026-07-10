@@ -14,7 +14,7 @@ class BackupRestoreAssetTests(unittest.TestCase):
         backup = (ROOT / "scripts" / "backup_hermes_data.sh").read_text(encoding="utf-8")
 
         self.assertIn("pg_isready -U aggasys -d aggasys", backup)
-        self.assertIn("-v ON_ERROR_STOP=1", backup)
+        self.assertIn("psql -v ON_ERROR_STOP=1 -U aggasys -d aggasys -tAc", backup)
         self.assertIn("PostgreSQL database dump", backup)
         self.assertIn("[ ! -s \"$OUT\" ]", backup)
 
