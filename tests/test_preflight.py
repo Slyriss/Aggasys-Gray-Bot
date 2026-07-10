@@ -34,6 +34,7 @@ VALID_ENV = {
     "GRAY_BOT_USERNAME": "GrayBot",
     "RATE_LIMIT_MESSAGES": "30",
     "RATE_LIMIT_WINDOW_SECONDS": "60",
+    "HERMES_BACKUP_RETENTION_DAYS": "30",
 }
 
 
@@ -149,6 +150,15 @@ class PreflightTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("RATE_LIMIT_MESSAGES must be a positive integer.", report.errors)
         self.assertIn("RATE_LIMIT_WINDOW_SECONDS must be a positive integer.", report.errors)
+
+    def test_bad_backup_retention_fails(self):
+        env = dict(VALID_ENV)
+        env["HERMES_BACKUP_RETENTION_DAYS"] = "never"
+
+        report = collect_preflight_report(env)
+
+        self.assertFalse(report.ok)
+        self.assertIn("HERMES_BACKUP_RETENTION_DAYS must be a positive integer.", report.errors)
 
     def test_bad_timezone_fails(self):
         env = dict(VALID_ENV)

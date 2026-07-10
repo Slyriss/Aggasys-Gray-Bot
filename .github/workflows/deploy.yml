@@ -75,6 +75,7 @@ jobs:
           upsert_env HERMES_TIMEZONE Asia/Singapore
           upsert_env HERMES_GROUP_CHAT_MODE mention
           upsert_env GRAY_BOT_USERNAME GrayBot
+          upsert_env HERMES_BACKUP_RETENTION_DAYS 30
           upsert_env RATE_LIMIT_MESSAGES 30
           upsert_env RATE_LIMIT_WINDOW_SECONDS 60
 

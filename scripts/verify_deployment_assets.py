@@ -81,6 +81,7 @@ REQUIRED_WORKFLOW_MARKERS = [
     "bash scripts/check_post_deploy_health.sh",
     "bash scripts/deploy_bot_with_rollback.sh",
     "python3 scripts/verify_deploy_status.py DEPLOY_STATUS.md",
+    "upsert_env HERMES_BACKUP_RETENTION_DAYS 30",
     "upsert_env RATE_LIMIT_MESSAGES 30",
     "upsert_env RATE_LIMIT_WINDOW_SECONDS 60",
 ]
@@ -169,11 +170,13 @@ def main() -> int:
             errors.append(f".env.example missing DeepSeek VM marker: {marker}")
     if "HERMES_JOB_FAILURE_LIMIT=3" not in env_example:
         errors.append(".env.example missing HERMES_JOB_FAILURE_LIMIT.")
+    if "HERMES_BACKUP_RETENTION_DAYS=30" not in env_example:
+        errors.append(".env.example missing HERMES_BACKUP_RETENTION_DAYS.")
     for marker in ("RATE_LIMIT_MESSAGES=30", "RATE_LIMIT_WINDOW_SECONDS=60"):
         if marker not in env_example:
             errors.append(f".env.example missing rate limit marker: {marker}")
     preflight = _read("bot/preflight.py")
-    for marker in ("ALLOWED_USERS", "ADMIN_USERS", "OPERATOR_USERS", "RATE_LIMIT_MESSAGES", "RATE_LIMIT_WINDOW_SECONDS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "ZoneInfo"):
+    for marker in ("ALLOWED_USERS", "ADMIN_USERS", "OPERATOR_USERS", "RATE_LIMIT_MESSAGES", "RATE_LIMIT_WINDOW_SECONDS", "HERMES_BACKUP_RETENTION_DAYS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "ZoneInfo"):
         if marker not in preflight:
             errors.append(f"bot/preflight.py missing strict env marker: {marker}")
     model_client = _read("bot/model_client.py")
@@ -282,6 +285,10 @@ def main() -> int:
     for marker in ("ROLLBACK_IMAGE", "docker tag", "docker compose up -d --build bot", "check_post_deploy_health.sh --since", "docker compose up -d --no-build bot", "Rollback completed"):
         if marker not in rollback:
             errors.append(f"scripts/deploy_bot_with_rollback.sh missing rollback marker: {marker}")
+    backup = _read("scripts/backup_hermes_data.sh")
+    for marker in ("HERMES_BACKUP_RETENTION_DAYS", "find \"$BACKUP_DIR\" -maxdepth 1 -type f -name 'hermes-*.sql'", "-mtime +\"$BACKUP_RETENTION_DAYS\""):
+        if marker not in backup:
+            errors.append(f"scripts/backup_hermes_data.sh missing retention marker: {marker}")
     build_smoke = _read("scripts/docker_build_smoke.py")
     for marker in ("docker", "build", "bot/Dockerfile", "aggasys-gray-bot:smoke", "Docker engine is not reachable"):
         if marker not in build_smoke:

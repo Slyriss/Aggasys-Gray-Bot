@@ -17,6 +17,9 @@ class BackupRestoreAssetTests(unittest.TestCase):
         self.assertIn("psql -v ON_ERROR_STOP=1 -U aggasys -d aggasys -tAc", backup)
         self.assertIn("PostgreSQL database dump", backup)
         self.assertIn("[ ! -s \"$OUT\" ]", backup)
+        self.assertIn("HERMES_BACKUP_RETENTION_DAYS", backup)
+        self.assertIn("find \"$BACKUP_DIR\" -maxdepth 1 -type f -name 'hermes-*.sql'", backup)
+        self.assertIn("-mtime +\"$BACKUP_RETENTION_DAYS\"", backup)
 
     def test_restore_requires_explicit_confirmation_and_hermes_inserts(self):
         restore = (ROOT / "scripts" / "restore_hermes_data.sh").read_text(encoding="utf-8")

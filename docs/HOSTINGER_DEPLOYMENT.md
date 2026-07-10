@@ -90,6 +90,7 @@ Minimum required keys:
 - `EMBEDDING_PROVIDER`
 - `HERMES_TIMEZONE`
 - `HERMES_GROUP_CHAT_MODE`
+- `HERMES_BACKUP_RETENTION_DAYS`
 - `GRAY_BOT_USERNAME`
 - `RATE_LIMIT_MESSAGES`
 - `RATE_LIMIT_WINDOW_SECONDS`
@@ -99,6 +100,8 @@ characters in `DATABASE_URL` if your generated password contains symbols.
 Hermes scheduled jobs auto-pause after `HERMES_JOB_FAILURE_LIMIT` consecutive
 failures; default is `3`. Auto-pauses are written to Hermes audit as
 `scheduled_job_auto_paused`.
+Hermes operational backups are pruned by `HERMES_BACKUP_RETENTION_DAYS`;
+default is `30`.
 
 ## Model Backend
 
@@ -140,7 +143,8 @@ The migration is written to be idempotent and should run on every upgrade.
 Do not skip it just because an older table already exists; Hermes tables and
 columns may have been added after the older second-brain migration.
 Hermes operational backups are written to `backups/hermes-<timestamp>.sql`
-before upgrade migrations.
+before upgrade migrations. Older `hermes-*.sql` files in that directory are
+pruned after successful backup according to `HERMES_BACKUP_RETENTION_DAYS`.
 The backup and restore scripts wait for Postgres readiness and run SQL with
 `ON_ERROR_STOP=1`; do not restore a file unless it was produced by
 `scripts/backup_hermes_data.sh`.

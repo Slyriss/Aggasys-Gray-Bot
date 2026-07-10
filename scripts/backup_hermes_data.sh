@@ -4,6 +4,7 @@
 set -euo pipefail
 
 BACKUP_DIR=${1:-backups}
+BACKUP_RETENTION_DAYS=${HERMES_BACKUP_RETENTION_DAYS:-30}
 STAMP=$(date -u +"%Y%m%dT%H%M%SZ")
 OUT="$BACKUP_DIR/hermes-$STAMP.sql"
 
@@ -15,6 +16,11 @@ TABLES=(
 )
 
 mkdir -p "$BACKUP_DIR"
+
+if ! [[ "$BACKUP_RETENTION_DAYS" =~ ^[0-9]+$ ]] || [ "$BACKUP_RETENTION_DAYS" -lt 1 ]; then
+  echo "HERMES_BACKUP_RETENTION_DAYS must be a positive integer." >&2
+  exit 1
+fi
 
 docker compose up -d postgres
 
@@ -60,3 +66,6 @@ if ! grep -q "PostgreSQL database dump" "$OUT"; then
 fi
 
 echo "Hermes data backup written to $OUT"
+
+find "$BACKUP_DIR" -maxdepth 1 -type f -name 'hermes-*.sql' -mtime +"$BACKUP_RETENTION_DAYS" -print -delete \
+  | sed 's/^/Pruned old Hermes backup: /'
