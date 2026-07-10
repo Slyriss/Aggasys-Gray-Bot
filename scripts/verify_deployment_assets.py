@@ -214,6 +214,7 @@ def main() -> int:
         "telegram_error_handler", "add_error_handler", "telegram_handler_error", "handler_error",
         "close_db_pool", "await close_db_pool()",
         "forget_me_cmd", "self_service_deleted", "delete_user_data",
+        "anonymized_after_self_service_delete",
         "Restricted to Gray admins", "Restricted to Gray operators",
     ):
         if marker not in main_py:

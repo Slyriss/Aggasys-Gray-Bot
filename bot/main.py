@@ -467,12 +467,13 @@ async def forget_me_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         action=HermesAction(
             name="delete_data",
             description="Self-service deletion of a user's personal Gray data.",
-            actor_user_id=user_id,
-            chat_id=update.effective_chat.id,
+            actor_user_id=None,
+            chat_id=None,
             risk=ActionRisk.MEDIUM,
             params={
                 "scope": "self_service_user_data",
                 "deleted": deleted,
+                "audit_identity": "anonymized_after_self_service_delete",
             },
         ),
     )

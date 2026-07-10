@@ -316,7 +316,10 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         record.assert_awaited_once()
         decision = record.await_args.args[0]
         self.assertEqual(decision.action.name, "delete_data")
+        self.assertIsNone(decision.action.actor_user_id)
+        self.assertIsNone(decision.action.chat_id)
         self.assertEqual(decision.action.params["scope"], "self_service_user_data")
+        self.assertEqual(decision.action.params["audit_identity"], "anonymized_after_self_service_delete")
         self.assertEqual(record.await_args.kwargs["status"], "self_service_deleted")
         self.assertIn("personal Gray data has been deleted", update.message.replies[0]["text"])
 
