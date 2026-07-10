@@ -105,6 +105,16 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         for patcher in reversed(self.role_patchers):
             patcher.stop()
 
+    async def test_start_help_uses_plain_text_for_underscore_commands(self):
+        update = fake_update(user_id=123)
+        context = SimpleNamespace()
+
+        await bot_main.start(update, context)
+
+        self.assertIn("/forget_me", update.message.replies[0]["text"])
+        self.assertIn("/standup_start", update.message.replies[0]["text"])
+        self.assertNotIn("parse_mode", update.message.replies[0]["kwargs"])
+
     async def test_standup_schedule_creates_daily_standup_job(self):
         update = fake_update(user_id=456)
         context = SimpleNamespace(args=["09:30", "Alice,", "Bob"])

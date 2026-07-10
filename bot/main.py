@@ -422,8 +422,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/lint — audit wiki for gaps\n"
         "/clear — clear conversation history\n"
         "/forget_me — delete your stored personal data\n"
-        "/help — this message",
-        parse_mode="Markdown"
+        "/help — this message"
     )
 
 

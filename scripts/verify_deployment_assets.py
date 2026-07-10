@@ -194,7 +194,7 @@ def main() -> int:
         if marker not in env_example:
             errors.append(f".env.example missing safety limit marker: {marker}")
     preflight = _read("bot/preflight.py")
-    for marker in ("ALLOWED_USERS", "ADMIN_USERS", "OPERATOR_USERS", "RATE_LIMIT_MESSAGES", "RATE_LIMIT_WINDOW_SECONDS", "MAX_DOCUMENT_BYTES", "MAX_VOICE_BYTES", "MAX_PHOTO_BYTES", "HERMES_BACKUP_RETENTION_DAYS", "HERMES_AUDIT_RETENTION_DAYS", "HERMES_OPERATION_RETENTION_DAYS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "ZoneInfo"):
+    for marker in ("ALLOWED_USERS", "ADMIN_USERS", "OPERATOR_USERS", "RATE_LIMIT_MESSAGES", "RATE_LIMIT_WINDOW_SECONDS", "MAX_DOCUMENT_BYTES", "MAX_VOICE_BYTES", "MAX_PHOTO_BYTES", "HERMES_BACKUP_RETENTION_DAYS", "HERMES_AUDIT_RETENTION_DAYS", "HERMES_OPERATION_RETENTION_DAYS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "DB_MIN_POOL_SIZE must be less than or equal to DB_MAX_POOL_SIZE", "ZoneInfo"):
         if marker not in preflight:
             errors.append(f"bot/preflight.py missing strict env marker: {marker}")
     model_client = _read("bot/model_client.py")

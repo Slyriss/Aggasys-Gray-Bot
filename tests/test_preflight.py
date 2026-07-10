@@ -24,6 +24,8 @@ VALID_ENV = {
     "ALLOWED_USERS": "123456789,987654321",
     "ADMIN_USERS": "123456789",
     "OPERATOR_USERS": "987654321",
+    "DB_MIN_POOL_SIZE": "1",
+    "DB_MAX_POOL_SIZE": "10",
     "MODEL_PROVIDER": "deepseek",
     "DEEPSEEK_API_KEY": "sk-" + "x" * 32,
     "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
@@ -86,6 +88,16 @@ class PreflightTests(unittest.TestCase):
         report = collect_preflight_report(env)
 
         self.assertTrue(report.ok)
+
+    def test_db_min_pool_cannot_exceed_max_pool(self):
+        env = dict(VALID_ENV)
+        env["DB_MIN_POOL_SIZE"] = "5"
+        env["DB_MAX_POOL_SIZE"] = "2"
+
+        report = collect_preflight_report(env)
+
+        self.assertFalse(report.ok)
+        self.assertIn("DB_MIN_POOL_SIZE must be less than or equal to DB_MAX_POOL_SIZE.", report.errors)
 
     def test_bad_allowed_users_fails(self):
         env = dict(VALID_ENV)

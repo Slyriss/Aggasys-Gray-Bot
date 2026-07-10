@@ -195,6 +195,12 @@ def collect_preflight_report(env: dict[str, str]) -> PreflightReport:
         if value and not _positive_int(value):
             errors.append(f"{key} must be a positive integer.")
 
+    db_min_pool = env.get("DB_MIN_POOL_SIZE")
+    db_max_pool = env.get("DB_MAX_POOL_SIZE")
+    if db_min_pool and db_max_pool and _positive_int(db_min_pool) and _positive_int(db_max_pool):
+        if int(db_min_pool) > int(db_max_pool):
+            errors.append("DB_MIN_POOL_SIZE must be less than or equal to DB_MAX_POOL_SIZE.")
+
     return PreflightReport(errors=errors, warnings=warnings)
 
 
