@@ -153,6 +153,8 @@ def main() -> int:
 
     env_example = _read(".env.example")
     for marker in (
+        "ADMIN_USERS=123456789",
+        "OPERATOR_USERS=",
         "MODEL_PROVIDER=deepseek",
         "DEEPSEEK_API_KEY=replace_with_deepseek_api_key",
         "DEEPSEEK_BASE_URL=https://api.deepseek.com",
@@ -164,7 +166,7 @@ def main() -> int:
     if "HERMES_JOB_FAILURE_LIMIT=3" not in env_example:
         errors.append(".env.example missing HERMES_JOB_FAILURE_LIMIT.")
     preflight = _read("bot/preflight.py")
-    for marker in ("ALLOWED_USERS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "ZoneInfo"):
+    for marker in ("ALLOWED_USERS", "ADMIN_USERS", "OPERATOR_USERS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "ZoneInfo"):
         if marker not in preflight:
             errors.append(f"bot/preflight.py missing strict env marker: {marker}")
     model_client = _read("bot/model_client.py")
@@ -173,6 +175,9 @@ def main() -> int:
             errors.append(f"bot/model_client.py missing DeepSeek marker: {marker}")
 
     main_py = _read("bot/main.py")
+    for marker in ("ADMIN_USERS", "OPERATOR_USERS", "_require_admin", "_require_operator", "Restricted to Gray admins", "Restricted to Gray operators"):
+        if marker not in main_py:
+            errors.append(f"bot/main.py missing RBAC marker: {marker}")
     for marker in REQUIRED_COMMAND_MARKERS:
         if marker not in main_py:
             errors.append(f"bot/main.py missing command marker: {marker}")

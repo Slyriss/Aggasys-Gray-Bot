@@ -58,6 +58,14 @@ _ALLOWED_RAW = os.getenv("ALLOWED_USERS", "")
 ALLOWED_USERS: set[int] = {
     int(uid.strip()) for uid in _ALLOWED_RAW.split(",") if uid.strip().isdigit()
 }
+_ADMIN_RAW = os.getenv("ADMIN_USERS", "")
+ADMIN_USERS: set[int] = {
+    int(uid.strip()) for uid in _ADMIN_RAW.split(",") if uid.strip().isdigit()
+}
+_OPERATOR_RAW = os.getenv("OPERATOR_USERS", "")
+OPERATOR_USERS: set[int] = {
+    int(uid.strip()) for uid in _OPERATOR_RAW.split(",") if uid.strip().isdigit()
+}
 
 _memory_queue = None
 _memory_workers = []
@@ -67,6 +75,28 @@ _hermes_scheduler = None
 
 def _is_allowed(user_id: int) -> bool:
     return not ALLOWED_USERS or user_id in ALLOWED_USERS
+
+
+def _is_admin(user_id: int) -> bool:
+    return user_id in ADMIN_USERS
+
+
+def _is_operator(user_id: int) -> bool:
+    return _is_admin(user_id) or user_id in OPERATOR_USERS
+
+
+async def _require_admin(update: Update) -> bool:
+    if _is_admin(update.effective_user.id):
+        return True
+    await update.message.reply_text("Restricted to Gray admins.")
+    return False
+
+
+async def _require_operator(update: Update) -> bool:
+    if _is_operator(update.effective_user.id):
+        return True
+    await update.message.reply_text("Restricted to Gray operators.")
+    return False
 
 
 def _bot_identity(context: ContextTypes.DEFAULT_TYPE) -> tuple[str | None, int | None]:
@@ -102,6 +132,12 @@ async def post_init(app):
         logger.info("Allowlist active: %s", ALLOWED_USERS)
     else:
         logger.warning("No ALLOWED_USERS set — bot is open to everyone")
+    if ADMIN_USERS:
+        logger.info("Admin role active: %s", ADMIN_USERS)
+    else:
+        logger.warning("No ADMIN_USERS set — Hermes admin commands are unavailable")
+    if OPERATOR_USERS:
+        logger.info("Operator role active: %s", OPERATOR_USERS)
 
 
 async def post_shutdown(app):
@@ -239,6 +275,8 @@ async def ingest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ingest text OR a URL into the wiki."""
     if not _is_allowed(update.effective_user.id):
         return
+    if not await _require_admin(update):
+        return
     arg = " ".join(context.args).strip()
     if not arg:
         await update.message.reply_text("Usage: /ingest <text or URL>")
@@ -272,6 +310,8 @@ async def ingest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def lint_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_admin(update):
         return
     msg = await update.message.reply_text("🔍 Auditing wiki...")
     result = await lint_wiki()
@@ -571,6 +611,8 @@ async def hermes_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def approvals_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
         return
+    if not await _require_admin(update):
+        return
     rows = await get_pending_hermes_approvals(update.effective_chat.id, limit=10)
     if not rows:
         await update.message.reply_text("No pending Hermes approvals.")
@@ -584,6 +626,8 @@ async def approvals_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def approve_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_admin(update):
         return
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text("Usage: /approve <approval_id>")
@@ -617,6 +661,8 @@ async def approve_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def deny_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_admin(update):
         return
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text("Usage: /deny <approval_id> [reason]")
@@ -653,6 +699,8 @@ async def deny_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def standup_start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_operator(update):
         return
     raw = " ".join(context.args).strip()
     participants = parse_participants(raw)
@@ -736,6 +784,8 @@ async def standup_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def standup_chase_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
         return
+    if not await _require_operator(update):
+        return
     decision = await _decide_and_audit(
         update,
         "standup_chase",
@@ -759,6 +809,8 @@ async def standup_chase_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def standup_close_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_operator(update):
         return
     decision = await _decide_and_audit(
         update,
@@ -785,6 +837,8 @@ async def standup_close_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def standup_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_operator(update):
         return
     if len(context.args) < 2:
         await update.message.reply_text("Usage: /standup_schedule <HH:MM> Alice, Bob, Charlie")
@@ -831,6 +885,8 @@ async def standup_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
 async def standup_chase_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
         return
+    if not await _require_operator(update):
+        return
     if len(context.args) != 1:
         await update.message.reply_text("Usage: /standup_chase_schedule <HH:MM>")
         return
@@ -870,6 +926,8 @@ async def standup_chase_schedule_cmd(update: Update, context: ContextTypes.DEFAU
 
 async def monitor_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_admin(update):
         return
     if len(context.args) < 2:
         await update.message.reply_text("Usage: /monitor_schedule <HH:MM> <query>")
@@ -942,6 +1000,8 @@ async def schedules_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def schedule_pause_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
         return
+    if not await _require_admin(update):
+        return
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text("Usage: /schedule_pause <id>")
         return
@@ -966,6 +1026,8 @@ async def schedule_pause_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def schedule_resume_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_admin(update):
         return
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text("Usage: /schedule_resume <id>")
@@ -1008,6 +1070,8 @@ async def schedule_resume_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def schedule_remove_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_admin(update):
         return
     if not context.args or not context.args[0].isdigit():
         await update.message.reply_text("Usage: /schedule_remove <id>")

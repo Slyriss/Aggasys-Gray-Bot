@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 REQUIRED_ENV = (
     "TELEGRAM_TOKEN",
     "ALLOWED_USERS",
+    "ADMIN_USERS",
     "DATABASE_URL",
     "DB_PASS",
     "HERMES_TIMEZONE",
@@ -129,6 +130,28 @@ def collect_preflight_report(env: dict[str, str]) -> PreflightReport:
     if not allowed:
         errors.append("ALLOWED_USERS must be set so Gray is not open to every Telegram user.")
 
+    admins = env.get("ADMIN_USERS", "")
+    if admins and not _valid_allowed_users(admins):
+        errors.append("ADMIN_USERS must be comma-separated Telegram numeric IDs.")
+    if not admins:
+        errors.append("ADMIN_USERS must be set so Hermes admin commands are not ownerless.")
+    elif allowed:
+        allowed_ids = _parse_user_ids(allowed)
+        for admin_id in _parse_user_ids(admins):
+            if admin_id not in allowed_ids:
+                errors.append("ADMIN_USERS must be a subset of ALLOWED_USERS.")
+                break
+
+    operators = env.get("OPERATOR_USERS", "")
+    if operators and not _valid_allowed_users(operators):
+        errors.append("OPERATOR_USERS must be comma-separated Telegram numeric IDs.")
+    elif operators and allowed:
+        allowed_ids = _parse_user_ids(allowed)
+        for operator_id in _parse_user_ids(operators):
+            if operator_id not in allowed_ids:
+                errors.append("OPERATOR_USERS must be a subset of ALLOWED_USERS.")
+                break
+
     group_mode = env.get("HERMES_GROUP_CHAT_MODE", "mention").strip().lower()
     if group_mode not in {"mention", "all", "always", "off", "never"}:
         errors.append("HERMES_GROUP_CHAT_MODE must be one of: mention, all, always, off, never.")
@@ -181,6 +204,10 @@ def _looks_like_postgres_url(value: str) -> bool:
 
 def _valid_allowed_users(value: str) -> bool:
     return all(part.strip().isdigit() for part in value.split(",") if part.strip())
+
+
+def _parse_user_ids(value: str) -> set[str]:
+    return {part.strip() for part in value.split(",") if part.strip()}
 
 
 def _positive_int(value: str) -> bool:

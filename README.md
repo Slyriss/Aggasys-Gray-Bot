@@ -93,7 +93,8 @@ VPS:
   required.
 - `docker compose config` and `python scripts/docker_build_smoke.py` pass on the
   VPS.
-- You have a real Telegram bot token, `ALLOWED_USERS`, and `GRAY_BOT_USERNAME`.
+- You have a real Telegram bot token, `ALLOWED_USERS`, `ADMIN_USERS`, and
+  `GRAY_BOT_USERNAME`.
 - You are ready to run the Telegram smoke test in `docs/TELEGRAM_SMOKE_TEST.md`
   immediately after deploy.
 
@@ -124,6 +125,15 @@ bash deploy.sh upgrade
 
 Both deploy paths run preflight checks, local gates, database backup/migration,
 container startup, and post-deploy health checks.
+
+## Access Roles
+
+- `ALLOWED_USERS` can chat with Gray and use personal/task/read commands.
+- `OPERATOR_USERS` can run team workflow commands such as standup scheduling,
+  standup chasing, and standup closing.
+- `ADMIN_USERS` can approve/deny Hermes requests, manage schedules, run web
+  monitoring, and change wiki knowledge. Admins automatically count as
+  operators.
 
 ## Current Limits
 

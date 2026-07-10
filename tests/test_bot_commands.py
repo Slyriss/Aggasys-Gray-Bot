@@ -91,8 +91,21 @@ def allowed_decision(name="test", params=None):
 
 
 class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.role_patchers = [
+            patch.object(bot_main, "ALLOWED_USERS", {123, 456, 789}),
+            patch.object(bot_main, "ADMIN_USERS", {123}),
+            patch.object(bot_main, "OPERATOR_USERS", {456}),
+        ]
+        for patcher in self.role_patchers:
+            patcher.start()
+
+    async def asyncTearDown(self):
+        for patcher in reversed(self.role_patchers):
+            patcher.stop()
+
     async def test_standup_schedule_creates_daily_standup_job(self):
-        update = fake_update()
+        update = fake_update(user_id=456)
         context = SimpleNamespace(args=["09:30", "Alice,", "Bob"])
 
         with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
@@ -109,7 +122,7 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Daily standup schedule #41", update.message.replies[0]["text"])
 
     async def test_standup_chase_schedule_creates_chase_job(self):
-        update = fake_update()
+        update = fake_update(user_id=456)
         context = SimpleNamespace(args=["09:50"])
 
         with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
@@ -126,7 +139,7 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Daily standup chase schedule #42", update.message.replies[0]["text"])
 
     async def test_monitor_schedule_creates_web_monitor_job(self):
-        update = fake_update()
+        update = fake_update(user_id=123)
         context = SimpleNamespace(args=["10:00", "Singapore", "SME", "AI", "tenders"])
 
         with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
@@ -143,7 +156,7 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Daily web monitor #43", update.message.replies[0]["text"])
 
     async def test_monitor_schedule_rejects_missing_query(self):
-        update = fake_update()
+        update = fake_update(user_id=123)
         context = SimpleNamespace(args=["10:00"])
 
         with patch.object(bot_main, "create_hermes_job", AsyncMock()) as create_job:
@@ -151,6 +164,48 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
 
         create_job.assert_not_awaited()
         self.assertEqual(update.message.replies[0]["text"], "Usage: /monitor_schedule <HH:MM> <query>")
+
+    async def test_monitor_schedule_requires_admin_role(self):
+        update = fake_update(user_id=456)
+        context = SimpleNamespace(args=["10:00", "Singapore", "AI", "tenders"])
+
+        with patch.object(bot_main, "create_hermes_job", AsyncMock()) as create_job:
+            await bot_main.monitor_schedule_cmd(update, context)
+
+        create_job.assert_not_awaited()
+        self.assertEqual(update.message.replies[0]["text"], "Restricted to Gray admins.")
+
+    async def test_standup_schedule_requires_operator_role(self):
+        update = fake_update(user_id=789)
+        context = SimpleNamespace(args=["09:30", "Alice,", "Bob"])
+
+        with patch.object(bot_main, "create_hermes_job", AsyncMock()) as create_job:
+            await bot_main.standup_schedule_cmd(update, context)
+
+        create_job.assert_not_awaited()
+        self.assertEqual(update.message.replies[0]["text"], "Restricted to Gray operators.")
+
+    async def test_admin_can_approve_pending_request(self):
+        update = fake_update(user_id=123)
+        context = SimpleNamespace(args=["55"])
+        approval = {"action_name": "schedule_web_monitor"}
+
+        with patch.object(bot_main, "resolve_hermes_approval", AsyncMock(return_value=approval)), \
+             patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())) as audit:
+            await bot_main.approve_cmd(update, context)
+
+        audit.assert_awaited_once()
+        self.assertIn("Approved Hermes request #55", update.message.replies[0]["text"])
+
+    async def test_approve_requires_admin_role(self):
+        update = fake_update(user_id=456)
+        context = SimpleNamespace(args=["55"])
+
+        with patch.object(bot_main, "resolve_hermes_approval", AsyncMock()) as resolve:
+            await bot_main.approve_cmd(update, context)
+
+        resolve.assert_not_awaited()
+        self.assertEqual(update.message.replies[0]["text"], "Restricted to Gray admins.")
 
 
 if __name__ == "__main__":

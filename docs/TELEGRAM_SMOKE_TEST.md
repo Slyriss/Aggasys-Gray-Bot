@@ -1,7 +1,8 @@
 # Telegram Smoke Test
 
-Run this after a fresh or upgraded Hostinger deploy from the Telegram account in
-`ALLOWED_USERS`.
+Run this after a fresh or upgraded Hostinger deploy from a Telegram account in
+`ADMIN_USERS`. Repeat the standup-only section from an `OPERATOR_USERS` account
+when testing delegated workflow access.
 
 ## Service Checks
 
@@ -76,6 +77,8 @@ Expected:
 - `/schedules` lists daily standup, chase, and monitor jobs.
 - Pause, resume, and remove update schedule state without errors.
 - Scheduled jobs appear in `/hermes` audit after they run.
+- `/monitor_schedule`, `/schedule_pause`, `/schedule_resume`, and
+  `/schedule_remove` require an admin.
 
 ## Group Chat Policy
 

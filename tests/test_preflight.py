@@ -22,6 +22,8 @@ VALID_ENV = {
     "DATABASE_URL": _database_url("verylongpassword"),
     "DB_PASS": "verylongpassword",
     "ALLOWED_USERS": "123456789,987654321",
+    "ADMIN_USERS": "123456789",
+    "OPERATOR_USERS": "987654321",
     "MODEL_PROVIDER": "deepseek",
     "DEEPSEEK_API_KEY": "sk-" + "x" * 32,
     "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
@@ -85,6 +87,37 @@ class PreflightTests(unittest.TestCase):
 
         self.assertFalse(report.ok)
         self.assertIn("ALLOWED_USERS must be comma-separated Telegram numeric IDs.", report.errors)
+
+    def test_admin_users_are_required(self):
+        env = dict(VALID_ENV)
+        env["ADMIN_USERS"] = ""
+
+        report = collect_preflight_report(env)
+
+        self.assertFalse(report.ok)
+        self.assertIn("ADMIN_USERS must be set so Hermes admin commands are not ownerless.", report.errors)
+
+    def test_role_users_must_be_allowed(self):
+        env = dict(VALID_ENV)
+        env["ADMIN_USERS"] = "555555555"
+        env["OPERATOR_USERS"] = "666666666"
+
+        report = collect_preflight_report(env)
+
+        self.assertFalse(report.ok)
+        self.assertIn("ADMIN_USERS must be a subset of ALLOWED_USERS.", report.errors)
+        self.assertIn("OPERATOR_USERS must be a subset of ALLOWED_USERS.", report.errors)
+
+    def test_role_users_must_be_numeric(self):
+        env = dict(VALID_ENV)
+        env["ADMIN_USERS"] = "alice"
+        env["OPERATOR_USERS"] = "123,bob"
+
+        report = collect_preflight_report(env)
+
+        self.assertFalse(report.ok)
+        self.assertIn("ADMIN_USERS must be comma-separated Telegram numeric IDs.", report.errors)
+        self.assertIn("OPERATOR_USERS must be comma-separated Telegram numeric IDs.", report.errors)
 
     def test_empty_allowed_users_fails(self):
         env = dict(VALID_ENV)

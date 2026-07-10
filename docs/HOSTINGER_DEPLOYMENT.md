@@ -79,6 +79,8 @@ Minimum required keys:
 
 - `TELEGRAM_TOKEN`
 - `ALLOWED_USERS`
+- `ADMIN_USERS`
+- `OPERATOR_USERS` (optional; admins are operators automatically)
 - `DB_PASS`
 - `DATABASE_URL`
 - `MODEL_PROVIDER`
@@ -147,7 +149,7 @@ The backup and restore scripts wait for Postgres readiness and run SQL with
 python3 scripts/check_hostinger_readiness.py
 bash scripts/check_vps_prereqs.sh
 python3 scripts/create_env_from_example.py
-# edit .env: TELEGRAM_TOKEN, ALLOWED_USERS, GRAY_BOT_USERNAME, and any model changes
+# edit .env: TELEGRAM_TOKEN, ALLOWED_USERS, ADMIN_USERS, GRAY_BOT_USERNAME, and any model changes
 python3 scripts/release_readiness.py --include-heavy
 python3 scripts/check_in_venv.py
 python3 bot/preflight.py --env-file .env
