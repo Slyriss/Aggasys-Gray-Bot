@@ -213,6 +213,7 @@ def main() -> int:
         "MAX_DOCUMENT_BYTES", "MAX_VOICE_BYTES", "MAX_PHOTO_BYTES",
         "_reject_oversize_upload", "upload_too_large:", "blocked_upload_size",
         "ops_status_cmd", "DeepSeek key: `{_configured_state",
+        "_role_count_summary", "Allowlist active: %s",
         "telegram_error_handler", "add_error_handler", "telegram_handler_error", "handler_error",
         "_send_text", "Telegram Markdown rejected", "_reply_text", "_edit_text",
         "close_db_pool", "await close_db_pool()",

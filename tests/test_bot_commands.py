@@ -445,6 +445,13 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Pending approvals: `3`", reply)
         self.assertNotIn("sk-secret-value-that-must-not-leak", reply)
 
+    async def test_role_count_summary_does_not_expose_user_ids(self):
+        summary = bot_main._role_count_summary({123456789, 987654321})
+
+        self.assertEqual(summary, "2 user(s)")
+        self.assertNotIn("123456789", summary)
+        self.assertNotIn("987654321", summary)
+
     async def test_personal_data_commands_require_private_chat(self):
         commands = [
             ("forget_me", bot_main.forget_me_cmd, SimpleNamespace(args=[]), "get_user_data_counts"),

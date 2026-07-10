@@ -85,6 +85,10 @@ _rate_limit_buckets: dict[int, deque[float]] = {}
 SUMMARY_RECIPIENT_TIERS = {"chat", "admins", "both"}
 
 
+def _role_count_summary(user_ids: set[int]) -> str:
+    return f"{len(user_ids)} user(s)"
+
+
 def _is_allowed(user_id: int) -> bool:
     return not ALLOWED_USERS or user_id in ALLOWED_USERS
 
@@ -350,15 +354,15 @@ async def post_init(app):
     _hermes_scheduler.start()
     logger.info("Memory queue started workers=%s", MEMORY_WORKERS)
     if ALLOWED_USERS:
-        logger.info("Allowlist active: %s", ALLOWED_USERS)
+        logger.info("Allowlist active: %s", _role_count_summary(ALLOWED_USERS))
     else:
         logger.warning("No ALLOWED_USERS set — bot is open to everyone")
     if ADMIN_USERS:
-        logger.info("Admin role active: %s", ADMIN_USERS)
+        logger.info("Admin role active: %s", _role_count_summary(ADMIN_USERS))
     else:
         logger.warning("No ADMIN_USERS set — Hermes admin commands are unavailable")
     if OPERATOR_USERS:
-        logger.info("Operator role active: %s", OPERATOR_USERS)
+        logger.info("Operator role active: %s", _role_count_summary(OPERATOR_USERS))
     logger.info(
         "Rate limit active: %s messages per %ss",
         RATE_LIMIT_MESSAGES,
