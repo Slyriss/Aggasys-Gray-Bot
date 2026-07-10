@@ -220,6 +220,7 @@ def main() -> int:
         "anonymized_after_self_service_delete",
         "Restricted to Gray admins", "Restricted to Gray operators",
         "_matching_active_schedule", "already exists as #",
+        "SUMMARY_RECIPIENT_TIERS", "Invalid recipient tier",
     ):
         if marker not in main_py:
             errors.append(f"bot/main.py missing RBAC marker: {marker}")

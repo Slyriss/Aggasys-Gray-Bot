@@ -82,6 +82,7 @@ _memory_workers = []
 _hermes_policy = HermesPolicy()
 _hermes_scheduler = None
 _rate_limit_buckets: dict[int, deque[float]] = {}
+SUMMARY_RECIPIENT_TIERS = {"chat", "admins", "both"}
 
 
 def _is_allowed(user_id: int) -> bool:
@@ -1275,7 +1276,11 @@ async def standup_summary_schedule_cmd(update: Update, context: ContextTypes.DEF
         await update.message.reply_text("Usage: /standup_summary_schedule <HH:MM> [chat|admins|both]")
         return
     schedule_value = context.args[0]
-    recipient_tier = summary_recipient_tier(context.args[1] if len(context.args) == 2 else "chat")
+    raw_recipient_tier = context.args[1].strip().lower() if len(context.args) == 2 else "chat"
+    if raw_recipient_tier not in SUMMARY_RECIPIENT_TIERS:
+        await update.message.reply_text("Invalid recipient tier. Use one of: chat, admins, both.")
+        return
+    recipient_tier = summary_recipient_tier(raw_recipient_tier)
     try:
         daily_at = parse_daily_time(schedule_value)
     except ValueError as exc:

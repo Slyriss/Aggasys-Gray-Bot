@@ -81,6 +81,8 @@ What happens after setup:
 - `admins`: DM the summary to Telegram IDs in `ADMIN_USERS`.
 - `both`: post to the group and DM admins.
 
+Gray rejects any other recipient value instead of guessing.
+
 Admins must have started a private chat with Gray before Telegram allows Gray to
 DM them.
 

@@ -242,6 +242,16 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(create_job.await_args.args[6], {"summary_recipients": "chat"})
 
+    async def test_standup_summary_schedule_rejects_invalid_recipient_tier(self):
+        update = fake_update(user_id=456)
+        context = SimpleNamespace(args=["17:30", "admin"])
+
+        with patch.object(bot_main, "create_hermes_job", AsyncMock()) as create_job:
+            await bot_main.standup_summary_schedule_cmd(update, context)
+
+        create_job.assert_not_awaited()
+        self.assertEqual(update.message.replies[0]["text"], "Invalid recipient tier. Use one of: chat, admins, both.")
+
     async def test_monitor_schedule_creates_web_monitor_job(self):
         update = fake_update(user_id=123)
         context = SimpleNamespace(args=["10:00", "Singapore", "SME", "AI", "tenders"])
