@@ -174,9 +174,43 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args[6], {"participants": ["Alice", "Bob"]})
         self.assertIn("Daily standup schedule #41", update.message.replies[0]["text"])
 
+    async def test_standup_schedule_normalizes_compact_time_before_storing(self):
+        update = fake_update(user_id=456)
+        context = SimpleNamespace(args=["0930", "Alice,", "Bob"])
+
+        with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
+             patch.object(bot_main, "datetime_now", return_value=datetime(2026, 7, 9, 8, 0)), \
+             patch.object(bot_main, "get_hermes_jobs", AsyncMock(return_value=[])), \
+             patch.object(bot_main, "create_hermes_job", AsyncMock(return_value=41)) as create_job:
+            await bot_main.standup_schedule_cmd(update, context)
+
+        args = create_job.await_args.args
+        self.assertEqual(args[4], "09:30")
+        self.assertEqual(args[6], {"participants": ["Alice", "Bob"]})
+        self.assertIn("created for 09:30", update.message.replies[0]["text"])
+
     async def test_standup_schedule_reuses_existing_active_schedule(self):
         update = fake_update(user_id=456)
         context = SimpleNamespace(args=["09:30", "Alice,", "Bob"])
+        existing = [{
+            "id": 41,
+            "status": "active",
+            "job_type": "daily_standup",
+            "schedule_kind": "daily",
+            "schedule_value": "09:30",
+        }]
+
+        with patch.object(bot_main, "_decide_and_audit", AsyncMock(return_value=allowed_decision())), \
+             patch.object(bot_main, "get_hermes_jobs", AsyncMock(return_value=existing)), \
+             patch.object(bot_main, "create_hermes_job", AsyncMock()) as create_job:
+            await bot_main.standup_schedule_cmd(update, context)
+
+        create_job.assert_not_awaited()
+        self.assertEqual(update.message.replies[0]["text"], "Daily standup schedule already exists as #41 for 09:30.")
+
+    async def test_standup_schedule_matches_existing_compact_time_duplicate(self):
+        update = fake_update(user_id=456)
+        context = SimpleNamespace(args=["0930", "Alice,", "Bob"])
         existing = [{
             "id": 41,
             "status": "active",

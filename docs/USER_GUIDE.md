@@ -60,6 +60,9 @@ Run these in the team Telegram group from an operator/admin account:
 /standup_summary_schedule 17:30 both
 ```
 
+Schedule times can be entered as `HH:MM` or compact `HHMM`; Gray stores them as
+`HH:MM` so duplicates are detected consistently.
+
 What happens after setup:
 
 - At `09:30`, Gray opens or reuses the daily standup and prompts the team.

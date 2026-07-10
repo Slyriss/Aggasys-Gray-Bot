@@ -784,8 +784,21 @@ def _jsonb_dict(value) -> dict:
     return {}
 
 
+def _normalize_daily_schedule_value(daily_at) -> str:
+    return daily_at.strftime("%H:%M")
+
+
+def _schedule_values_match(left: str, right: str) -> bool:
+    try:
+        left = _normalize_daily_schedule_value(parse_daily_time(left))
+        right = _normalize_daily_schedule_value(parse_daily_time(right))
+    except ValueError:
+        left = left.strip()
+        right = right.strip()
+    return left == right
+
+
 def _matching_active_schedule(jobs: list[dict], job_type: str, schedule_value: str) -> dict | None:
-    normalized_time = schedule_value.strip()
     for job in jobs:
         if job.get("status") != "active":
             continue
@@ -793,7 +806,7 @@ def _matching_active_schedule(jobs: list[dict], job_type: str, schedule_value: s
             continue
         if job.get("schedule_kind") != "daily":
             continue
-        if str(job.get("schedule_value") or "").strip() == normalized_time:
+        if _schedule_values_match(str(job.get("schedule_value") or ""), schedule_value):
             return job
     return None
 
@@ -1173,6 +1186,7 @@ async def standup_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
     except ValueError as exc:
         await update.message.reply_text(f"Invalid time: {exc}")
         return
+    schedule_value = _normalize_daily_schedule_value(daily_at)
     participants = parse_participants(raw_participants)
     if not participants:
         await update.message.reply_text("Add at least one participant.")
@@ -1229,6 +1243,7 @@ async def standup_chase_schedule_cmd(update: Update, context: ContextTypes.DEFAU
     except ValueError as exc:
         await update.message.reply_text(f"Invalid time: {exc}")
         return
+    schedule_value = _normalize_daily_schedule_value(daily_at)
     decision = await _decide_and_audit(
         update,
         "schedule_standup_chase",
@@ -1286,6 +1301,7 @@ async def standup_summary_schedule_cmd(update: Update, context: ContextTypes.DEF
     except ValueError as exc:
         await update.message.reply_text(f"Invalid time: {exc}")
         return
+    schedule_value = _normalize_daily_schedule_value(daily_at)
     decision = await _decide_and_audit(
         update,
         "schedule_standup_summary",
@@ -1340,6 +1356,7 @@ async def monitor_schedule_cmd(update: Update, context: ContextTypes.DEFAULT_TYP
     except ValueError as exc:
         await update.message.reply_text(f"Invalid time: {exc}")
         return
+    schedule_value = _normalize_daily_schedule_value(daily_at)
     decision = await _decide_and_audit(
         update,
         "schedule_web_monitor",

@@ -46,6 +46,8 @@ automated standup setup:
 
 Gray refuses to create a duplicate recurring job for the same chat, job type,
 and daily time; it shows the existing schedule ID instead.
+Schedule times may be entered as `HH:MM` or compact `HHMM`; Gray stores them as
+`HH:MM`.
 
 ## Local Checks
 

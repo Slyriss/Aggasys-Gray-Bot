@@ -220,6 +220,7 @@ def main() -> int:
         "anonymized_after_self_service_delete",
         "Restricted to Gray admins", "Restricted to Gray operators",
         "_matching_active_schedule", "already exists as #",
+        "_normalize_daily_schedule_value", "_schedule_values_match",
         "SUMMARY_RECIPIENT_TIERS", "Invalid recipient tier",
     ):
         if marker not in main_py:
@@ -312,6 +313,7 @@ def main() -> int:
         "/ops_status",
         "/forget_me",
         "duplicate recurring job",
+        "compact `HHMM`",
         "telegram_handler_error",
         "URL reading rejects localhost",
         "scripts/prune_hermes_data.py",
