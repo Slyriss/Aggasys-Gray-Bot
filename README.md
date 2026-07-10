@@ -142,6 +142,9 @@ container startup, and post-deploy health checks.
 - URL reading rejects localhost, private/link-local IPs, unsafe DNS resolutions,
   private redirects, oversized responses, and non-HTTP(S) schemes before content
   is injected into Gray's context.
+- `scripts/prune_hermes_data.py` gives ops a dry-run-first retention path for
+  old audit rows, resolved approvals, inactive jobs, and closed standups using
+  `HERMES_AUDIT_RETENTION_DAYS` and `HERMES_OPERATION_RETENTION_DAYS`.
 - `RATE_LIMIT_MESSAGES` and `RATE_LIMIT_WINDOW_SECONDS` cap allowed-user traffic
   before model/database work starts. Rate-limit denials are written to Hermes
   audit as `rate_limited` with status `blocked_rate_limit`.

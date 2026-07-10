@@ -76,6 +76,8 @@ jobs:
           upsert_env HERMES_GROUP_CHAT_MODE mention
           upsert_env GRAY_BOT_USERNAME GrayBot
           upsert_env HERMES_BACKUP_RETENTION_DAYS 30
+          upsert_env HERMES_AUDIT_RETENTION_DAYS 180
+          upsert_env HERMES_OPERATION_RETENTION_DAYS 365
           upsert_env RATE_LIMIT_MESSAGES 30
           upsert_env RATE_LIMIT_WINDOW_SECONDS 60
           upsert_env MAX_DOCUMENT_BYTES 5242880

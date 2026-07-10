@@ -38,6 +38,7 @@ REQUIRED_FILES = [
     "scripts/verify_command_surface.py",
     "scripts/backup_hermes_data.sh",
     "scripts/restore_hermes_data.sh",
+    "scripts/prune_hermes_data.py",
 ]
 
 REQUIRED_MIGRATION_MARKERS = [
@@ -82,6 +83,8 @@ REQUIRED_WORKFLOW_MARKERS = [
     "bash scripts/deploy_bot_with_rollback.sh",
     "python3 scripts/verify_deploy_status.py DEPLOY_STATUS.md",
     "upsert_env HERMES_BACKUP_RETENTION_DAYS 30",
+    "upsert_env HERMES_AUDIT_RETENTION_DAYS 180",
+    "upsert_env HERMES_OPERATION_RETENTION_DAYS 365",
     "upsert_env RATE_LIMIT_MESSAGES 30",
     "upsert_env RATE_LIMIT_WINDOW_SECONDS 60",
     "upsert_env MAX_DOCUMENT_BYTES 5242880",
@@ -176,6 +179,10 @@ def main() -> int:
         errors.append(".env.example missing HERMES_JOB_FAILURE_LIMIT.")
     if "HERMES_BACKUP_RETENTION_DAYS=30" not in env_example:
         errors.append(".env.example missing HERMES_BACKUP_RETENTION_DAYS.")
+    if "HERMES_AUDIT_RETENTION_DAYS=180" not in env_example:
+        errors.append(".env.example missing HERMES_AUDIT_RETENTION_DAYS.")
+    if "HERMES_OPERATION_RETENTION_DAYS=365" not in env_example:
+        errors.append(".env.example missing HERMES_OPERATION_RETENTION_DAYS.")
     for marker in (
         "RATE_LIMIT_MESSAGES=30",
         "RATE_LIMIT_WINDOW_SECONDS=60",
@@ -186,7 +193,7 @@ def main() -> int:
         if marker not in env_example:
             errors.append(f".env.example missing safety limit marker: {marker}")
     preflight = _read("bot/preflight.py")
-    for marker in ("ALLOWED_USERS", "ADMIN_USERS", "OPERATOR_USERS", "RATE_LIMIT_MESSAGES", "RATE_LIMIT_WINDOW_SECONDS", "MAX_DOCUMENT_BYTES", "MAX_VOICE_BYTES", "MAX_PHOTO_BYTES", "HERMES_BACKUP_RETENTION_DAYS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "ZoneInfo"):
+    for marker in ("ALLOWED_USERS", "ADMIN_USERS", "OPERATOR_USERS", "RATE_LIMIT_MESSAGES", "RATE_LIMIT_WINDOW_SECONDS", "MAX_DOCUMENT_BYTES", "MAX_VOICE_BYTES", "MAX_PHOTO_BYTES", "HERMES_BACKUP_RETENTION_DAYS", "HERMES_AUDIT_RETENTION_DAYS", "HERMES_OPERATION_RETENTION_DAYS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "ZoneInfo"):
         if marker not in preflight:
             errors.append(f"bot/preflight.py missing strict env marker: {marker}")
     model_client = _read("bot/model_client.py")
@@ -213,7 +220,7 @@ def main() -> int:
             errors.append(f"bot/main.py missing command marker: {marker}")
 
     db_py = _read("bot/db.py")
-    for marker in ("HERMES_JOB_FAILURE_LIMIT", "status = CASE", "consecutive_failures + 1 >= $3", "RETURNING id, chat_id"):
+    for marker in ("HERMES_JOB_FAILURE_LIMIT", "status = CASE", "consecutive_failures + 1 >= $3", "RETURNING id, chat_id", "get_hermes_retention_counts", "prune_hermes_retention", "status IN ('approved', 'denied', 'expired')", "status IN ('removed', 'paused')", "status = 'closed'"):
         if marker not in db_py:
             errors.append(f"bot/db.py missing failed-job auto-pause marker: {marker}")
     scheduler = _read("bot/hermes/scheduler.py")
@@ -279,6 +286,8 @@ def main() -> int:
         errors.append("Hostinger deployment doc must mention the venv check helper.")
     if "scripts/release_readiness.py" not in deployment_doc:
         errors.append("Hostinger deployment doc must mention the release readiness helper.")
+    if "scripts/prune_hermes_data.py" not in deployment_doc:
+        errors.append("Hostinger deployment doc must mention the Hermes retention pruner.")
     if "psql -v ON_ERROR_STOP=1" not in deployment_doc:
         errors.append("Hostinger deployment doc must show strict migration execution.")
     readme = _read("README.md")
@@ -291,6 +300,7 @@ def main() -> int:
         "/ops_status",
         "telegram_handler_error",
         "URL reading rejects localhost",
+        "scripts/prune_hermes_data.py",
         "Supply ordering is intentionally not implemented yet",
     ):
         if marker not in readme:
@@ -320,6 +330,10 @@ def main() -> int:
     for marker in ("HERMES_BACKUP_RETENTION_DAYS", "find \"$BACKUP_DIR\" -maxdepth 1 -type f -name 'hermes-*.sql'", "-mtime +\"$BACKUP_RETENTION_DAYS\""):
         if marker not in backup:
             errors.append(f"scripts/backup_hermes_data.sh missing retention marker: {marker}")
+    prune = _read("scripts/prune_hermes_data.py")
+    for marker in ("Hermes retention dry run", "--yes", "get_hermes_retention_counts", "prune_hermes_retention", "HERMES_AUDIT_RETENTION_DAYS", "HERMES_OPERATION_RETENTION_DAYS"):
+        if marker not in prune:
+            errors.append(f"scripts/prune_hermes_data.py missing retention marker: {marker}")
     build_smoke = _read("scripts/docker_build_smoke.py")
     for marker in ("docker", "build", "bot/Dockerfile", "aggasys-gray-bot:smoke", "Docker engine is not reachable"):
         if marker not in build_smoke:

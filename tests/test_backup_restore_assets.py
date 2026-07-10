@@ -37,6 +37,26 @@ class BackupRestoreAssetTests(unittest.TestCase):
         self.assertIn("ALTER USER aggasys WITH PASSWORD", sync)
         self.assertIn(">/dev/null", sync)
 
+    def test_retention_prune_script_is_dry_run_by_default(self):
+        script = (ROOT / "scripts" / "prune_hermes_data.py").read_text(encoding="utf-8")
+
+        self.assertIn("Hermes retention dry run", script)
+        self.assertIn("--yes", script)
+        self.assertIn("prune_hermes_retention", script)
+        self.assertIn("get_hermes_retention_counts", script)
+        self.assertIn("HERMES_AUDIT_RETENTION_DAYS", script)
+        self.assertIn("HERMES_OPERATION_RETENTION_DAYS", script)
+
+    def test_db_retention_only_prunes_resolved_inactive_operational_rows(self):
+        db = (ROOT / "bot" / "db.py").read_text(encoding="utf-8")
+
+        self.assertIn("get_hermes_retention_counts", db)
+        self.assertIn("prune_hermes_retention", db)
+        self.assertIn("status IN ('approved', 'denied', 'expired')", db)
+        self.assertIn("status IN ('removed', 'paused')", db)
+        self.assertIn("status = 'closed'", db)
+        self.assertIn("completed_at < NOW()", db)
+
 
 if __name__ == "__main__":
     unittest.main()

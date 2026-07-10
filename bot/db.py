@@ -7,6 +7,8 @@ DB_MIN_POOL_SIZE = int(os.getenv("DB_MIN_POOL_SIZE", "1"))
 DB_MAX_POOL_SIZE = int(os.getenv("DB_MAX_POOL_SIZE", "10"))
 MAX_USER_MEMORY_ROWS = int(os.getenv("MAX_USER_MEMORY_ROWS", "30"))
 HERMES_JOB_FAILURE_LIMIT = int(os.getenv("HERMES_JOB_FAILURE_LIMIT", "3"))
+HERMES_AUDIT_RETENTION_DAYS = int(os.getenv("HERMES_AUDIT_RETENTION_DAYS", "180"))
+HERMES_OPERATION_RETENTION_DAYS = int(os.getenv("HERMES_OPERATION_RETENTION_DAYS", "365"))
 _pool = None
 
 
@@ -531,6 +533,79 @@ async def get_hermes_scheduler_health() -> dict:
         "errored_jobs": 0,
         "next_run_at": None,
     }
+
+
+async def get_hermes_retention_counts(audit_days: int | None = None,
+                                      operation_days: int | None = None) -> dict:
+    audit_days = audit_days or HERMES_AUDIT_RETENTION_DAYS
+    operation_days = operation_days or HERMES_OPERATION_RETENTION_DAYS
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """SELECT
+             (SELECT COUNT(*) FROM hermes_audit_log
+              WHERE created_at < NOW() - ($1::int * INTERVAL '1 day')) AS audit_log,
+             (SELECT COUNT(*) FROM hermes_approval_requests
+              WHERE status IN ('approved', 'denied', 'expired')
+                AND requested_at < NOW() - ($2::int * INTERVAL '1 day')) AS approval_requests,
+             (SELECT COUNT(*) FROM hermes_jobs
+              WHERE status IN ('removed', 'paused')
+                AND updated_at < NOW() - ($2::int * INTERVAL '1 day')) AS jobs,
+             (SELECT COUNT(*) FROM standup_sessions
+              WHERE status = 'closed'
+                AND completed_at < NOW() - ($2::int * INTERVAL '1 day')) AS standup_sessions""",
+        audit_days, operation_days,
+    )
+    return dict(row) if row else {
+        "audit_log": 0,
+        "approval_requests": 0,
+        "jobs": 0,
+        "standup_sessions": 0,
+    }
+
+
+async def prune_hermes_retention(audit_days: int | None = None,
+                                 operation_days: int | None = None) -> dict:
+    audit_days = audit_days or HERMES_AUDIT_RETENTION_DAYS
+    operation_days = operation_days or HERMES_OPERATION_RETENTION_DAYS
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            audit = await conn.execute(
+                """DELETE FROM hermes_audit_log
+                   WHERE created_at < NOW() - ($1::int * INTERVAL '1 day')""",
+                audit_days,
+            )
+            approvals = await conn.execute(
+                """DELETE FROM hermes_approval_requests
+                   WHERE status IN ('approved', 'denied', 'expired')
+                     AND requested_at < NOW() - ($1::int * INTERVAL '1 day')""",
+                operation_days,
+            )
+            jobs = await conn.execute(
+                """DELETE FROM hermes_jobs
+                   WHERE status IN ('removed', 'paused')
+                     AND updated_at < NOW() - ($1::int * INTERVAL '1 day')""",
+                operation_days,
+            )
+            standups = await conn.execute(
+                """DELETE FROM standup_sessions
+                   WHERE status = 'closed'
+                     AND completed_at < NOW() - ($1::int * INTERVAL '1 day')""",
+                operation_days,
+            )
+    return {
+        "audit_log": _row_count(audit),
+        "approval_requests": _row_count(approvals),
+        "jobs": _row_count(jobs),
+        "standup_sessions": _row_count(standups),
+    }
+
+
+def _row_count(result: str) -> int:
+    try:
+        return int(result.split()[-1])
+    except (AttributeError, ValueError, IndexError):
+        return 0
 
 
 async def create_standup_session(chat_id: int, created_by: int, participants: list[str]) -> int:

@@ -91,6 +91,8 @@ Minimum required keys:
 - `HERMES_TIMEZONE`
 - `HERMES_GROUP_CHAT_MODE`
 - `HERMES_BACKUP_RETENTION_DAYS`
+- `HERMES_AUDIT_RETENTION_DAYS`
+- `HERMES_OPERATION_RETENTION_DAYS`
 - `GRAY_BOT_USERNAME`
 - `RATE_LIMIT_MESSAGES`
 - `RATE_LIMIT_WINDOW_SECONDS`
@@ -105,6 +107,9 @@ failures; default is `3`. Auto-pauses are written to Hermes audit as
 `scheduled_job_auto_paused`.
 Hermes operational backups are pruned by `HERMES_BACKUP_RETENTION_DAYS`;
 default is `30`.
+Old Hermes audit rows can be pruned after `HERMES_AUDIT_RETENTION_DAYS`;
+resolved approvals, inactive jobs, and closed standups use
+`HERMES_OPERATION_RETENTION_DAYS`. Defaults are `180` and `365`.
 Telegram documents, voice notes, and photos are rejected before download if they
 exceed `MAX_DOCUMENT_BYTES`, `MAX_VOICE_BYTES`, or `MAX_PHOTO_BYTES`.
 
@@ -153,6 +158,15 @@ pruned after successful backup according to `HERMES_BACKUP_RETENTION_DAYS`.
 The backup and restore scripts wait for Postgres readiness and run SQL with
 `ON_ERROR_STOP=1`; do not restore a file unless it was produced by
 `scripts/backup_hermes_data.sh`.
+
+Operational retention is explicit and dry-run-first:
+
+```bash
+python3 scripts/prune_hermes_data.py
+python3 scripts/prune_hermes_data.py --yes
+```
+
+Run the dry run first and review the counts before using `--yes`.
 
 ## First Deploy
 

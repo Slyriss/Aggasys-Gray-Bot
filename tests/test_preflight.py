@@ -38,6 +38,8 @@ VALID_ENV = {
     "MAX_VOICE_BYTES": "10485760",
     "MAX_PHOTO_BYTES": "5242880",
     "HERMES_BACKUP_RETENTION_DAYS": "30",
+    "HERMES_AUDIT_RETENTION_DAYS": "180",
+    "HERMES_OPERATION_RETENTION_DAYS": "365",
 }
 
 
@@ -157,11 +159,15 @@ class PreflightTests(unittest.TestCase):
     def test_bad_backup_retention_fails(self):
         env = dict(VALID_ENV)
         env["HERMES_BACKUP_RETENTION_DAYS"] = "never"
+        env["HERMES_AUDIT_RETENTION_DAYS"] = "0"
+        env["HERMES_OPERATION_RETENTION_DAYS"] = "old"
 
         report = collect_preflight_report(env)
 
         self.assertFalse(report.ok)
         self.assertIn("HERMES_BACKUP_RETENTION_DAYS must be a positive integer.", report.errors)
+        self.assertIn("HERMES_AUDIT_RETENTION_DAYS must be a positive integer.", report.errors)
+        self.assertIn("HERMES_OPERATION_RETENTION_DAYS must be a positive integer.", report.errors)
 
     def test_bad_upload_limit_values_fail(self):
         env = dict(VALID_ENV)
