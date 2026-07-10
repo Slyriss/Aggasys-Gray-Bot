@@ -23,6 +23,7 @@ from db import (
     create_hermes_job, get_hermes_jobs, pause_hermes_job, remove_hermes_job,
     resume_hermes_job,
     get_hermes_approval, get_hermes_approval_counts, get_hermes_scheduler_health,
+    close_pool as close_db_pool,
 )
 from memory_extractor import extract_and_save
 from summarizer import maybe_summarize, get_summary_context
@@ -324,6 +325,7 @@ async def post_shutdown(app):
         await asyncio.gather(*_memory_workers, return_exceptions=True)
     await close_model_client()
     await close_embedding_client()
+    await close_db_pool()
 
 
 # ── Helpers ──────────────────────────────────────────────────────

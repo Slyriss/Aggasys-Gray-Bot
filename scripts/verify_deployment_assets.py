@@ -211,6 +211,7 @@ def main() -> int:
         "_reject_oversize_upload", "upload_too_large:", "blocked_upload_size",
         "ops_status_cmd", "DeepSeek key: `{_configured_state",
         "telegram_error_handler", "add_error_handler", "telegram_handler_error", "handler_error",
+        "close_db_pool", "await close_db_pool()",
         "Restricted to Gray admins", "Restricted to Gray operators",
     ):
         if marker not in main_py:
@@ -220,7 +221,7 @@ def main() -> int:
             errors.append(f"bot/main.py missing command marker: {marker}")
 
     db_py = _read("bot/db.py")
-    for marker in ("HERMES_JOB_FAILURE_LIMIT", "status = CASE", "consecutive_failures + 1 >= $3", "RETURNING id, chat_id", "get_hermes_retention_counts", "prune_hermes_retention", "status IN ('approved', 'denied', 'expired')", "status IN ('removed', 'paused')", "status = 'closed'"):
+    for marker in ("HERMES_JOB_FAILURE_LIMIT", "status = CASE", "consecutive_failures + 1 >= $3", "RETURNING id, chat_id", "get_hermes_retention_counts", "prune_hermes_retention", "status IN ('approved', 'denied', 'expired')", "status IN ('removed', 'paused')", "status = 'closed'", "async def close_pool", "await _pool.close()", "_pool = None"):
         if marker not in db_py:
             errors.append(f"bot/db.py missing failed-job auto-pause marker: {marker}")
     scheduler = _read("bot/hermes/scheduler.py")

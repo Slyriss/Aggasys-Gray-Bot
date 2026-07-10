@@ -40,7 +40,7 @@ for name in [
     "create_hermes_job", "get_hermes_jobs", "pause_hermes_job", "remove_hermes_job",
     "resume_hermes_job", "get_hermes_approval", "get_hermes_approval_counts",
     "get_hermes_scheduler_health", "semantic_search_company_memory",
-    "text_search_company_memory",
+    "text_search_company_memory", "close_pool",
 ]:
     setattr(db, name, AsyncMock())
 db.SUMMARY_TRIGGER_MESSAGES = 20
@@ -427,6 +427,21 @@ class TelegramErrorHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(decision.action.actor_user_id)
         self.assertIsNone(decision.action.chat_id)
         self.assertEqual(decision.action.params["update_type"], "None")
+
+
+class AppLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_post_shutdown_closes_database_pool(self):
+        bot_main._memory_workers = []
+        bot_main._hermes_scheduler = None
+
+        with patch.object(bot_main, "close_model_client", AsyncMock()) as close_model, \
+             patch.object(bot_main, "close_embedding_client", AsyncMock()) as close_embedding, \
+             patch.object(bot_main, "close_db_pool", AsyncMock()) as close_db:
+            await bot_main.post_shutdown(SimpleNamespace())
+
+        close_model.assert_awaited_once()
+        close_embedding.assert_awaited_once()
+        close_db.assert_awaited_once()
 
 
 if __name__ == "__main__":

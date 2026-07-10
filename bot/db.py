@@ -41,6 +41,13 @@ async def get_pool():
     return _pool
 
 
+async def close_pool() -> None:
+    global _pool
+    if _pool is not None:
+        await _pool.close()
+        _pool = None
+
+
 SUMMARY_TRIGGER_MESSAGES = int(os.getenv("SUMMARY_TRIGGER", "20"))
 
 
