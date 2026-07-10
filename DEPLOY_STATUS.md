@@ -1,13 +1,13 @@
 # VM Deploy Status
 
-**Deployed:** Fri Jul 10 06:11:28 AM UTC 2026
+**Deployed:** Fri Jul 10 06:21:35 AM UTC 2026
 **Commit:** d80fa045f6e5958f4818aadf127f93389e50e595
 
 ## Docker Services
 ```
 NAME                     IMAGE                    COMMAND                  SERVICE    CREATED          STATUS                 PORTS
-aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        21 seconds ago   Up 19 seconds          
-aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   2 hours ago      Up 2 hours (healthy)   5432/tcp
+aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        22 seconds ago   Up 19 seconds          
+aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   3 hours ago      Up 3 hours (healthy)   5432/tcp
 aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      2 hours ago      Up 2 hours (healthy)   6379/tcp
 ```
 
@@ -71,7 +71,7 @@ TELEGRAM_TOKEN
 ..INFO:url_ingester:Blocked unsafe URL redirect target: http://127.0.0.1/admin
 ..
 ----------------------------------------------------------------------
-Ran 160 tests in 0.890s
+Ran 160 tests in 0.679s
 
 OK
 Command surface verification OK
