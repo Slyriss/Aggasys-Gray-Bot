@@ -54,6 +54,13 @@ jobs:
           upsert_env HERMES_GROUP_CHAT_MODE mention
           upsert_env GRAY_BOT_USERNAME GrayBot
 
+      - name: Ensure Python venv support
+        run: |
+          if ! python3 -c 'import ensurepip' >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y python3.10-venv || sudo apt-get install -y python3-venv
+          fi
+
       - name: Run Gray/Hermes verification gates
         run: |
           cd ~/aggasys-bot
