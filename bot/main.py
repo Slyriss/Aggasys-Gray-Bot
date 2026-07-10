@@ -1,7 +1,9 @@
 import asyncio
+from collections import deque
 import logging
 import os
 import time
+from functools import wraps
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import (
@@ -50,6 +52,8 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HISTORY_LIMIT = int(os.getenv("HISTORY_LIMIT", "6"))
 MEMORY_QUEUE_SIZE = int(os.getenv("MEMORY_QUEUE_SIZE", "100"))
 MEMORY_WORKERS = int(os.getenv("MEMORY_WORKERS", "1"))
+RATE_LIMIT_MESSAGES = int(os.getenv("RATE_LIMIT_MESSAGES", "30"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
 EDIT_INTERVAL = 1.2
 EDIT_MIN_CHARS = 40
@@ -71,6 +75,7 @@ _memory_queue = None
 _memory_workers = []
 _hermes_policy = HermesPolicy()
 _hermes_scheduler = None
+_rate_limit_buckets: dict[int, deque[float]] = {}
 
 
 def _is_allowed(user_id: int) -> bool:
@@ -120,6 +125,58 @@ async def _audit_rbac_denial(update: Update, required_role: str) -> None:
     await record_decision(decision, status="blocked_rbac")
 
 
+async def _audit_rate_limit(update: Update, retry_after_seconds: int) -> None:
+    decision = ActionDecision(
+        status=ActionStatus.DENIED,
+        reason="User exceeded Gray rate limit.",
+        action=HermesAction(
+            name="rate_limited",
+            description="Rejected a Telegram update before execution because the user exceeded the rate limit.",
+            actor_user_id=update.effective_user.id,
+            chat_id=update.effective_chat.id,
+            risk=ActionRisk.READ_ONLY,
+            params={
+                "retry_after_seconds": retry_after_seconds,
+                "limit": RATE_LIMIT_MESSAGES,
+                "window_seconds": RATE_LIMIT_WINDOW_SECONDS,
+            },
+        ),
+    )
+    await record_decision(decision, status="blocked_rate_limit")
+
+
+async def _within_rate_limit(update: Update) -> bool:
+    if RATE_LIMIT_MESSAGES <= 0 or RATE_LIMIT_WINDOW_SECONDS <= 0:
+        return True
+    if not update.effective_user:
+        return True
+
+    now = time.monotonic()
+    bucket = _rate_limit_buckets.setdefault(update.effective_user.id, deque())
+    while bucket and now - bucket[0] >= RATE_LIMIT_WINDOW_SECONDS:
+        bucket.popleft()
+
+    if len(bucket) >= RATE_LIMIT_MESSAGES:
+        retry_after = max(1, int(RATE_LIMIT_WINDOW_SECONDS - (now - bucket[0])))
+        await _audit_rate_limit(update, retry_after)
+        await update.message.reply_text(f"Rate limit reached. Try again in {retry_after}s.")
+        return False
+
+    bucket.append(now)
+    return True
+
+
+def _rate_limited(handler):
+    @wraps(handler)
+    async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_user and _is_allowed(update.effective_user.id):
+            if not await _within_rate_limit(update):
+                return
+        return await handler(update, context)
+
+    return wrapped
+
+
 def _bot_identity(context: ContextTypes.DEFAULT_TYPE) -> tuple[str | None, int | None]:
     bot = getattr(context, "bot", None)
     username = os.getenv("GRAY_BOT_USERNAME") or getattr(bot, "username", None)
@@ -159,6 +216,11 @@ async def post_init(app):
         logger.warning("No ADMIN_USERS set — Hermes admin commands are unavailable")
     if OPERATOR_USERS:
         logger.info("Operator role active: %s", OPERATOR_USERS)
+    logger.info(
+        "Rate limit active: %s messages per %ss",
+        RATE_LIMIT_MESSAGES,
+        RATE_LIMIT_WINDOW_SECONDS,
+    )
 
 
 async def post_shutdown(app):
@@ -1315,40 +1377,40 @@ def main():
         .post_shutdown(post_shutdown)
         .build()
     )
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", start))
-    app.add_handler(CommandHandler("clear", clear_cmd))
-    app.add_handler(CommandHandler("wiki", wiki_cmd))
-    app.add_handler(CommandHandler("ingest", ingest_cmd))
-    app.add_handler(CommandHandler("lint", lint_cmd))
-    app.add_handler(CommandHandler("note", note_cmd))
-    app.add_handler(CommandHandler("recall", recall_cmd))
-    app.add_handler(CommandHandler("memory", memory_cmd))
-    app.add_handler(CommandHandler("task", task_cmd))
-    app.add_handler(CommandHandler("tasks", tasks_cmd))
-    app.add_handler(CommandHandler("done", done_cmd))
-    app.add_handler(CommandHandler("brief", brief_cmd))
-    app.add_handler(CommandHandler("hermes", hermes_cmd))
-    app.add_handler(CommandHandler("hermes_status", hermes_status_cmd))
-    app.add_handler(CommandHandler("approvals", approvals_cmd))
-    app.add_handler(CommandHandler("approve", approve_cmd))
-    app.add_handler(CommandHandler("deny", deny_cmd))
-    app.add_handler(CommandHandler("standup_start", standup_start_cmd))
-    app.add_handler(CommandHandler("standup_update", standup_update_cmd))
-    app.add_handler(CommandHandler("standup_status", standup_status_cmd))
-    app.add_handler(CommandHandler("standup_chase", standup_chase_cmd))
-    app.add_handler(CommandHandler("standup_close", standup_close_cmd))
-    app.add_handler(CommandHandler("standup_schedule", standup_schedule_cmd))
-    app.add_handler(CommandHandler("standup_chase_schedule", standup_chase_schedule_cmd))
-    app.add_handler(CommandHandler("monitor_schedule", monitor_schedule_cmd))
-    app.add_handler(CommandHandler("schedules", schedules_cmd))
-    app.add_handler(CommandHandler("schedule_pause", schedule_pause_cmd))
-    app.add_handler(CommandHandler("schedule_resume", schedule_resume_cmd))
-    app.add_handler(CommandHandler("schedule_remove", schedule_remove_cmd))
-    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(CommandHandler("start", _rate_limited(start)))
+    app.add_handler(CommandHandler("help", _rate_limited(start)))
+    app.add_handler(CommandHandler("clear", _rate_limited(clear_cmd)))
+    app.add_handler(CommandHandler("wiki", _rate_limited(wiki_cmd)))
+    app.add_handler(CommandHandler("ingest", _rate_limited(ingest_cmd)))
+    app.add_handler(CommandHandler("lint", _rate_limited(lint_cmd)))
+    app.add_handler(CommandHandler("note", _rate_limited(note_cmd)))
+    app.add_handler(CommandHandler("recall", _rate_limited(recall_cmd)))
+    app.add_handler(CommandHandler("memory", _rate_limited(memory_cmd)))
+    app.add_handler(CommandHandler("task", _rate_limited(task_cmd)))
+    app.add_handler(CommandHandler("tasks", _rate_limited(tasks_cmd)))
+    app.add_handler(CommandHandler("done", _rate_limited(done_cmd)))
+    app.add_handler(CommandHandler("brief", _rate_limited(brief_cmd)))
+    app.add_handler(CommandHandler("hermes", _rate_limited(hermes_cmd)))
+    app.add_handler(CommandHandler("hermes_status", _rate_limited(hermes_status_cmd)))
+    app.add_handler(CommandHandler("approvals", _rate_limited(approvals_cmd)))
+    app.add_handler(CommandHandler("approve", _rate_limited(approve_cmd)))
+    app.add_handler(CommandHandler("deny", _rate_limited(deny_cmd)))
+    app.add_handler(CommandHandler("standup_start", _rate_limited(standup_start_cmd)))
+    app.add_handler(CommandHandler("standup_update", _rate_limited(standup_update_cmd)))
+    app.add_handler(CommandHandler("standup_status", _rate_limited(standup_status_cmd)))
+    app.add_handler(CommandHandler("standup_chase", _rate_limited(standup_chase_cmd)))
+    app.add_handler(CommandHandler("standup_close", _rate_limited(standup_close_cmd)))
+    app.add_handler(CommandHandler("standup_schedule", _rate_limited(standup_schedule_cmd)))
+    app.add_handler(CommandHandler("standup_chase_schedule", _rate_limited(standup_chase_schedule_cmd)))
+    app.add_handler(CommandHandler("monitor_schedule", _rate_limited(monitor_schedule_cmd)))
+    app.add_handler(CommandHandler("schedules", _rate_limited(schedules_cmd)))
+    app.add_handler(CommandHandler("schedule_pause", _rate_limited(schedule_pause_cmd)))
+    app.add_handler(CommandHandler("schedule_resume", _rate_limited(schedule_resume_cmd)))
+    app.add_handler(CommandHandler("schedule_remove", _rate_limited(schedule_remove_cmd)))
+    app.add_handler(MessageHandler(filters.VOICE, _rate_limited(handle_voice)))
+    app.add_handler(MessageHandler(filters.Document.ALL, _rate_limited(handle_document)))
+    app.add_handler(MessageHandler(filters.PHOTO, _rate_limited(handle_photo)))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _rate_limited(handle_message)))
 
     logger.info("Aggasys second brain starting...")
     app.run_polling(drop_pending_updates=True)

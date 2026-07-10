@@ -32,6 +32,8 @@ VALID_ENV = {
     "HERMES_TIMEZONE": "Asia/Singapore",
     "HERMES_GROUP_CHAT_MODE": "mention",
     "GRAY_BOT_USERNAME": "GrayBot",
+    "RATE_LIMIT_MESSAGES": "30",
+    "RATE_LIMIT_WINDOW_SECONDS": "60",
 }
 
 
@@ -136,6 +138,17 @@ class PreflightTests(unittest.TestCase):
 
         self.assertFalse(report.ok)
         self.assertIn("HERMES_GROUP_CHAT_MODE must be one of: mention, all, always, off, never.", report.errors)
+
+    def test_bad_rate_limit_values_fail(self):
+        env = dict(VALID_ENV)
+        env["RATE_LIMIT_MESSAGES"] = "0"
+        env["RATE_LIMIT_WINDOW_SECONDS"] = "soon"
+
+        report = collect_preflight_report(env)
+
+        self.assertFalse(report.ok)
+        self.assertIn("RATE_LIMIT_MESSAGES must be a positive integer.", report.errors)
+        self.assertIn("RATE_LIMIT_WINDOW_SECONDS must be a positive integer.", report.errors)
 
     def test_bad_timezone_fails(self):
         env = dict(VALID_ENV)

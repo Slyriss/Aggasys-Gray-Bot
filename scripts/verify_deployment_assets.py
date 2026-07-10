@@ -79,6 +79,8 @@ REQUIRED_WORKFLOW_MARKERS = [
     "docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U aggasys -d aggasys < migration.sql",
     "bash scripts/check_post_deploy_health.sh",
     "python3 scripts/verify_deploy_status.py DEPLOY_STATUS.md",
+    "upsert_env RATE_LIMIT_MESSAGES 30",
+    "upsert_env RATE_LIMIT_WINDOW_SECONDS 60",
 ]
 
 FORBIDDEN_DEPLOY_MARKERS = [
@@ -165,8 +167,11 @@ def main() -> int:
             errors.append(f".env.example missing DeepSeek VM marker: {marker}")
     if "HERMES_JOB_FAILURE_LIMIT=3" not in env_example:
         errors.append(".env.example missing HERMES_JOB_FAILURE_LIMIT.")
+    for marker in ("RATE_LIMIT_MESSAGES=30", "RATE_LIMIT_WINDOW_SECONDS=60"):
+        if marker not in env_example:
+            errors.append(f".env.example missing rate limit marker: {marker}")
     preflight = _read("bot/preflight.py")
-    for marker in ("ALLOWED_USERS", "ADMIN_USERS", "OPERATOR_USERS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "ZoneInfo"):
+    for marker in ("ALLOWED_USERS", "ADMIN_USERS", "OPERATOR_USERS", "RATE_LIMIT_MESSAGES", "RATE_LIMIT_WINDOW_SECONDS", "MODEL_PROVIDER", "DEEPSEEK_API_KEY", "EMBEDDING_PROVIDER", "HERMES_TIMEZONE", "ZoneInfo"):
         if marker not in preflight:
             errors.append(f"bot/preflight.py missing strict env marker: {marker}")
     model_client = _read("bot/model_client.py")
@@ -175,7 +180,13 @@ def main() -> int:
             errors.append(f"bot/model_client.py missing DeepSeek marker: {marker}")
 
     main_py = _read("bot/main.py")
-    for marker in ("ADMIN_USERS", "OPERATOR_USERS", "_require_admin", "_require_operator", "_audit_rbac_denial", "rbac_denied:", "blocked_rbac", "Restricted to Gray admins", "Restricted to Gray operators"):
+    for marker in (
+        "ADMIN_USERS", "OPERATOR_USERS", "_require_admin", "_require_operator",
+        "_audit_rbac_denial", "rbac_denied:", "blocked_rbac",
+        "RATE_LIMIT_MESSAGES", "RATE_LIMIT_WINDOW_SECONDS", "_rate_limited",
+        "_within_rate_limit", "rate_limited", "blocked_rate_limit",
+        "Restricted to Gray admins", "Restricted to Gray operators",
+    ):
         if marker not in main_py:
             errors.append(f"bot/main.py missing RBAC marker: {marker}")
     for marker in REQUIRED_COMMAND_MARKERS:

@@ -91,6 +91,8 @@ Minimum required keys:
 - `HERMES_TIMEZONE`
 - `HERMES_GROUP_CHAT_MODE`
 - `GRAY_BOT_USERNAME`
+- `RATE_LIMIT_MESSAGES`
+- `RATE_LIMIT_WINDOW_SECONDS`
 
 `DB_PASS` must match the password embedded in `DATABASE_URL`. URL-encode special
 characters in `DATABASE_URL` if your generated password contains symbols.

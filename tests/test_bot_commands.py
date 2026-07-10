@@ -223,5 +223,70 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(update.message.replies[0]["text"], "Restricted to Gray admins.")
 
 
+class RateLimitTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        bot_main._rate_limit_buckets.clear()
+        self.role_patchers = [
+            patch.object(bot_main, "ALLOWED_USERS", {123}),
+            patch.object(bot_main, "RATE_LIMIT_MESSAGES", 2),
+            patch.object(bot_main, "RATE_LIMIT_WINDOW_SECONDS", 60),
+        ]
+        for patcher in self.role_patchers:
+            patcher.start()
+
+    async def asyncTearDown(self):
+        for patcher in reversed(self.role_patchers):
+            patcher.stop()
+        bot_main._rate_limit_buckets.clear()
+
+    async def test_rate_limit_allows_requests_below_limit(self):
+        update = fake_update(user_id=123)
+
+        with patch.object(bot_main.time, "monotonic", side_effect=[100.0, 101.0]):
+            self.assertTrue(await bot_main._within_rate_limit(update))
+            self.assertTrue(await bot_main._within_rate_limit(update))
+
+        self.assertEqual(update.message.replies, [])
+
+    async def test_rate_limit_blocks_and_audits_excess_requests(self):
+        update = fake_update(user_id=123)
+
+        with patch.object(bot_main.time, "monotonic", side_effect=[100.0, 101.0, 102.0]), \
+             patch.object(bot_main, "record_decision", AsyncMock()) as record:
+            self.assertTrue(await bot_main._within_rate_limit(update))
+            self.assertTrue(await bot_main._within_rate_limit(update))
+            self.assertFalse(await bot_main._within_rate_limit(update))
+
+        record.assert_awaited_once()
+        decision = record.await_args.args[0]
+        self.assertEqual(decision.action.name, "rate_limited")
+        self.assertEqual(record.await_args.kwargs["status"], "blocked_rate_limit")
+        self.assertIn("Rate limit reached", update.message.replies[0]["text"])
+
+    async def test_rate_limited_wrapper_skips_handler_execution(self):
+        update = fake_update(user_id=123)
+        context = SimpleNamespace()
+        handler = AsyncMock()
+        wrapped = bot_main._rate_limited(handler)
+
+        with patch.object(bot_main.time, "monotonic", side_effect=[100.0, 101.0, 102.0]), \
+             patch.object(bot_main, "record_decision", AsyncMock()):
+            await wrapped(update, context)
+            await wrapped(update, context)
+            await wrapped(update, context)
+
+        self.assertEqual(handler.await_count, 2)
+
+    async def test_rate_limiter_expires_old_entries(self):
+        update = fake_update(user_id=123)
+
+        with patch.object(bot_main.time, "monotonic", side_effect=[100.0, 101.0, 200.0]):
+            self.assertTrue(await bot_main._within_rate_limit(update))
+            self.assertTrue(await bot_main._within_rate_limit(update))
+            self.assertTrue(await bot_main._within_rate_limit(update))
+
+        self.assertEqual(update.message.replies, [])
+
+
 if __name__ == "__main__":
     unittest.main()
