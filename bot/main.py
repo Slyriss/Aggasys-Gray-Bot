@@ -28,7 +28,7 @@ from model_client import close_client as close_model_client
 from embedding import close_client as close_embedding_client, embed_text
 from wiki import list_pages, ingest_document, lint_wiki, search_wiki
 from db import semantic_search_company_memory, text_search_company_memory
-from hermes import ActionRisk, HermesAction, HermesPolicy
+from hermes import ActionRisk, ActionDecision, ActionStatus, HermesAction, HermesPolicy
 from hermes.audit import record_decision
 from hermes.approvals import approval_summary, create_approval_from_decision
 from hermes.chat_policy import should_process_message, strip_bot_mention
@@ -88,6 +88,7 @@ def _is_operator(user_id: int) -> bool:
 async def _require_admin(update: Update) -> bool:
     if _is_admin(update.effective_user.id):
         return True
+    await _audit_rbac_denial(update, "admin")
     await update.message.reply_text("Restricted to Gray admins.")
     return False
 
@@ -95,8 +96,28 @@ async def _require_admin(update: Update) -> bool:
 async def _require_operator(update: Update) -> bool:
     if _is_operator(update.effective_user.id):
         return True
+    await _audit_rbac_denial(update, "operator")
     await update.message.reply_text("Restricted to Gray operators.")
     return False
+
+
+async def _audit_rbac_denial(update: Update, required_role: str) -> None:
+    decision = ActionDecision(
+        status=ActionStatus.DENIED,
+        reason=f"User lacks required Gray role: {required_role}.",
+        action=HermesAction(
+            name=f"rbac_denied:{required_role}",
+            description="Rejected a command before execution because the user lacked the required role.",
+            actor_user_id=update.effective_user.id,
+            chat_id=update.effective_chat.id,
+            risk=ActionRisk.READ_ONLY,
+            params={
+                "required_role": required_role,
+                "username": getattr(update.effective_user, "username", None),
+            },
+        ),
+    )
+    await record_decision(decision, status="blocked_rbac")
 
 
 def _bot_identity(context: ContextTypes.DEFAULT_TYPE) -> tuple[str | None, int | None]:

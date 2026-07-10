@@ -169,20 +169,30 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         update = fake_update(user_id=456)
         context = SimpleNamespace(args=["10:00", "Singapore", "AI", "tenders"])
 
-        with patch.object(bot_main, "create_hermes_job", AsyncMock()) as create_job:
+        with patch.object(bot_main, "create_hermes_job", AsyncMock()) as create_job, \
+             patch.object(bot_main, "record_decision", AsyncMock()) as record:
             await bot_main.monitor_schedule_cmd(update, context)
 
         create_job.assert_not_awaited()
+        record.assert_awaited_once()
+        decision = record.await_args.args[0]
+        self.assertEqual(decision.action.name, "rbac_denied:admin")
+        self.assertEqual(record.await_args.kwargs["status"], "blocked_rbac")
         self.assertEqual(update.message.replies[0]["text"], "Restricted to Gray admins.")
 
     async def test_standup_schedule_requires_operator_role(self):
         update = fake_update(user_id=789)
         context = SimpleNamespace(args=["09:30", "Alice,", "Bob"])
 
-        with patch.object(bot_main, "create_hermes_job", AsyncMock()) as create_job:
+        with patch.object(bot_main, "create_hermes_job", AsyncMock()) as create_job, \
+             patch.object(bot_main, "record_decision", AsyncMock()) as record:
             await bot_main.standup_schedule_cmd(update, context)
 
         create_job.assert_not_awaited()
+        record.assert_awaited_once()
+        decision = record.await_args.args[0]
+        self.assertEqual(decision.action.name, "rbac_denied:operator")
+        self.assertEqual(record.await_args.kwargs["status"], "blocked_rbac")
         self.assertEqual(update.message.replies[0]["text"], "Restricted to Gray operators.")
 
     async def test_admin_can_approve_pending_request(self):
@@ -201,10 +211,15 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         update = fake_update(user_id=456)
         context = SimpleNamespace(args=["55"])
 
-        with patch.object(bot_main, "resolve_hermes_approval", AsyncMock()) as resolve:
+        with patch.object(bot_main, "resolve_hermes_approval", AsyncMock()) as resolve, \
+             patch.object(bot_main, "record_decision", AsyncMock()) as record:
             await bot_main.approve_cmd(update, context)
 
         resolve.assert_not_awaited()
+        record.assert_awaited_once()
+        decision = record.await_args.args[0]
+        self.assertEqual(decision.action.name, "rbac_denied:admin")
+        self.assertEqual(record.await_args.kwargs["status"], "blocked_rbac")
         self.assertEqual(update.message.replies[0]["text"], "Restricted to Gray admins.")
 
 

@@ -175,7 +175,7 @@ def main() -> int:
             errors.append(f"bot/model_client.py missing DeepSeek marker: {marker}")
 
     main_py = _read("bot/main.py")
-    for marker in ("ADMIN_USERS", "OPERATOR_USERS", "_require_admin", "_require_operator", "Restricted to Gray admins", "Restricted to Gray operators"):
+    for marker in ("ADMIN_USERS", "OPERATOR_USERS", "_require_admin", "_require_operator", "_audit_rbac_denial", "rbac_denied:", "blocked_rbac", "Restricted to Gray admins", "Restricted to Gray operators"):
         if marker not in main_py:
             errors.append(f"bot/main.py missing RBAC marker: {marker}")
     for marker in REQUIRED_COMMAND_MARKERS:
