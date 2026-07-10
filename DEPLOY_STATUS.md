@@ -1,14 +1,14 @@
 # VM Deploy Status
 
-**Deployed:** Fri Jul 10 04:40:29 AM UTC 2026
-**Commit:** 761007f590f0d402f3a2143e2e07670a41941b13
+**Deployed:** Fri Jul 10 04:47:06 AM UTC 2026
+**Commit:** 22787055d8fe94f7070707f0d54adce5d7a0af3c
 
 ## Docker Services
 ```
 NAME                     IMAGE                    COMMAND                  SERVICE    CREATED          STATUS                    PORTS
 aggasys-bot-bot-1        aggasys-bot-bot          "python main.py"         bot        22 seconds ago   Up 20 seconds             
-aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   51 minutes ago   Up 51 minutes (healthy)   5432/tcp
-aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      45 minutes ago   Up 45 minutes (healthy)   6379/tcp
+aggasys-bot-postgres-1   pgvector/pgvector:pg16   "docker-entrypoint.s…"   postgres   58 minutes ago   Up 58 minutes (healthy)   5432/tcp
+aggasys-bot-redis-1      redis:alpine             "docker-entrypoint.s…"   redis      51 minutes ago   Up 51 minutes (healthy)   6379/tcp
 ```
 
 ## Bot Logs (last 30 lines)
@@ -49,6 +49,9 @@ GRAY_BOT_USERNAME
 HERMES_BACKUP_RETENTION_DAYS
 HERMES_GROUP_CHAT_MODE
 HERMES_TIMEZONE
+MAX_DOCUMENT_BYTES
+MAX_PHOTO_BYTES
+MAX_VOICE_BYTES
 MODEL_PROVIDER
 OLLAMA_MODEL
 OLLAMA_URL
@@ -60,9 +63,9 @@ TELEGRAM_TOKEN
 
 ## Gray/Hermes Verification Gates
 ```
-....................................................................................................................
+........................................................................................................................
 ----------------------------------------------------------------------
-Ran 116 tests in 0.662s
+Ran 120 tests in 0.466s
 
 OK
 Command surface verification OK
