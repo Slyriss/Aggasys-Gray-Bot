@@ -147,6 +147,9 @@ container startup, and post-deploy health checks.
 ## Access Roles
 
 - `ALLOWED_USERS` can chat with Gray and use personal/task/read commands.
+- Personal-data commands such as `/recall`, `/memory`, `/tasks`, `/brief`, and
+  `/forget_me` only run in private chat to avoid exposing stored user data in a
+  team group.
 - `OPERATOR_USERS` can run team workflow commands such as standup scheduling,
   standup chasing, and standup closing.
 - `ADMIN_USERS` can approve/deny Hermes requests, manage schedules, run web

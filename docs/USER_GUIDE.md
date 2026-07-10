@@ -4,6 +4,10 @@ Gray is the Aggasys Telegram operations teammate. Use it in private chat for
 personal memory/tasks, and in team groups for standups, schedules, knowledge
 lookup, and admin workflows.
 
+Personal-data commands such as `/recall`, `/memory`, `/tasks`, `/brief`, and
+`/forget_me` only run in private chat so stored notes, tasks, summaries, and
+memory are not exposed in a team group.
+
 ## Roles
 
 Gray has three practical access tiers.
@@ -36,6 +40,8 @@ Send a normal message in private chat, or mention Gray in a group:
 /memory
 ```
 
+Use `/recall` and `/memory` in private chat only.
+
 ### Personal Tasks
 
 ```text
@@ -44,6 +50,8 @@ Send a normal message in private chat, or mention Gray in a group:
 /done 12
 /brief
 ```
+
+Use `/tasks` and `/brief` in private chat only.
 
 ## Automated Standups
 

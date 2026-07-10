@@ -97,6 +97,30 @@ def _is_operator(user_id: int) -> bool:
     return _is_admin(user_id) or user_id in OPERATOR_USERS
 
 
+def _is_private_chat(update: Update) -> bool:
+    return getattr(update.effective_chat, "type", None) == "private"
+
+
+async def _require_private_chat(update: Update, command_name: str) -> bool:
+    if _is_private_chat(update):
+        return True
+    decision = ActionDecision(
+        status=ActionStatus.DENIED,
+        reason=f"{command_name} exposes personal Gray data and must run in private chat.",
+        action=HermesAction(
+            name=f"private_chat_required:{command_name}",
+            description="Rejected a personal-data command outside private chat.",
+            actor_user_id=update.effective_user.id,
+            chat_id=update.effective_chat.id,
+            risk=ActionRisk.READ_ONLY,
+            params={"command": command_name},
+        ),
+    )
+    await record_decision(decision, status="blocked_private_chat")
+    await update.message.reply_text("Please use this command in a private chat with Gray.")
+    return False
+
+
 async def _require_admin(update: Update) -> bool:
     if _is_admin(update.effective_user.id):
         return True
@@ -475,6 +499,8 @@ def _user_data_counts_lines(counts: dict) -> list[str]:
 async def forget_me_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
         return
+    if not await _require_private_chat(update, "forget_me"):
+        return
     user_id = update.effective_user.id
     confirmed = context.args == ["CONFIRM"]
     if not confirmed:
@@ -595,6 +621,8 @@ async def recall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Unified recall — searches notes, company memory, and wiki."""
     if not _is_allowed(update.effective_user.id):
         return
+    if not await _require_private_chat(update, "recall"):
+        return
     user_id = update.effective_user.id
     query = " ".join(context.args).strip()
 
@@ -659,6 +687,8 @@ async def recall_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def memory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_allowed(update.effective_user.id):
         return
+    if not await _require_private_chat(update, "memory"):
+        return
     facts = await get_user_memory(update.effective_user.id)
     if not facts:
         await update.message.reply_text("🧠 No memories yet — they build up over time.")
@@ -690,6 +720,8 @@ async def task_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def tasks_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/tasks — show open tasks."""
     if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_private_chat(update, "tasks"):
         return
     tasks = await get_open_tasks(update.effective_user.id)
     if not tasks:
@@ -730,6 +762,8 @@ async def done_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def brief_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/brief — morning briefing: open tasks + recent notes + conversation summary."""
     if not _is_allowed(update.effective_user.id):
+        return
+    if not await _require_private_chat(update, "brief"):
         return
     user_id = update.effective_user.id
     msg = await update.message.reply_text("📊 Building your briefing...")

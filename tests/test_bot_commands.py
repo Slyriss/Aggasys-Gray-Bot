@@ -96,13 +96,17 @@ class FakeMessage:
         return self
 
 
-def fake_update(user_id=123, chat_id=-100):
+def fake_update(user_id=123, chat_id=-100, chat_type="group"):
     message = FakeMessage()
     return SimpleNamespace(
         effective_user=SimpleNamespace(id=user_id, username="alice", first_name="Alice", last_name=None),
-        effective_chat=SimpleNamespace(id=chat_id, type="group"),
+        effective_chat=SimpleNamespace(id=chat_id, type=chat_type),
         message=message,
     )
+
+
+def fake_private_update(user_id=123):
+    return fake_update(user_id=user_id, chat_id=user_id, chat_type="private")
 
 
 def allowed_decision(name="test", params=None):
@@ -441,8 +445,32 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Pending approvals: `3`", reply)
         self.assertNotIn("sk-secret-value-that-must-not-leak", reply)
 
+    async def test_personal_data_commands_require_private_chat(self):
+        commands = [
+            ("forget_me", bot_main.forget_me_cmd, SimpleNamespace(args=[]), "get_user_data_counts"),
+            ("recall", bot_main.recall_cmd, SimpleNamespace(args=[]), "get_recent_notes"),
+            ("memory", bot_main.memory_cmd, SimpleNamespace(), "get_user_memory"),
+            ("tasks", bot_main.tasks_cmd, SimpleNamespace(), "get_open_tasks"),
+            ("brief", bot_main.brief_cmd, SimpleNamespace(), "get_open_tasks"),
+        ]
+
+        for command_name, handler, context, backend_name in commands:
+            with self.subTest(command=command_name):
+                update = fake_update(user_id=123)
+                backend = AsyncMock()
+                with patch.object(bot_main, backend_name, backend), \
+                     patch.object(bot_main, "record_decision", AsyncMock()) as record:
+                    await handler(update, context)
+
+                backend.assert_not_awaited()
+                record.assert_awaited_once()
+                decision = record.await_args.args[0]
+                self.assertEqual(decision.action.name, f"private_chat_required:{command_name}")
+                self.assertEqual(record.await_args.kwargs["status"], "blocked_private_chat")
+                self.assertEqual(update.message.replies[0]["text"], "Please use this command in a private chat with Gray.")
+
     async def test_forget_me_without_confirmation_shows_counts_only(self):
-        update = fake_update(user_id=123)
+        update = fake_private_update(user_id=123)
         context = SimpleNamespace(args=[])
         counts = {
             "conversations": 2,
@@ -464,7 +492,7 @@ class BotScheduleCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Notes: 5", reply)
 
     async def test_forget_me_confirm_deletes_and_audits(self):
-        update = fake_update(user_id=123)
+        update = fake_private_update(user_id=123)
         context = SimpleNamespace(args=["CONFIRM"])
         deleted = {
             "conversations": 2,
