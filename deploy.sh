@@ -81,7 +81,7 @@ else
 fi
 
 info "Running local verification checks..."
-python3 scripts/run_checks.py || error "Local verification failed. Fix checks before deploying."
+python3 scripts/check_in_venv.py --venv .venv-deploy || error "Local verification failed. Fix checks before deploying."
 
 info "Validating Docker Compose config..."
 docker compose config >/dev/null || error "Docker Compose config is invalid."

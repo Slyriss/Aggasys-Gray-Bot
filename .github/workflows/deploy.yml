@@ -59,7 +59,7 @@ jobs:
           cd ~/aggasys-bot
           bash scripts/check_vps_prereqs.sh --skip-models
           python3 bot/preflight.py --env-file .env
-          python3 scripts/run_checks.py
+          python3 scripts/check_in_venv.py --venv .venv-deploy
           docker compose config >/dev/null
 
       - name: Run database migration (idempotent)
@@ -147,7 +147,7 @@ jobs:
             echo ""
             echo "## Gray/Hermes Verification Gates"
             echo '```'
-            python3 scripts/run_checks.py 2>&1
+            python3 scripts/check_in_venv.py --venv .venv-deploy 2>&1
             echo '```'
             echo ""
             echo "## Gray/Hermes Preflight"
