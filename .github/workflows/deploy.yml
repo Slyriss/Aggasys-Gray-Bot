@@ -27,21 +27,7 @@ jobs:
               local key="$1"
               local value="$2"
               if grep -q "^${key}=" .env; then
-                python3 - "$key" "$value" <<'PY'
-import sys
-from pathlib import Path
-
-key, value = sys.argv[1], sys.argv[2]
-path = Path(".env")
-lines = path.read_text(encoding="utf-8").splitlines()
-path.write_text(
-    "\n".join(
-        f"{key}={value}" if line.startswith(f"{key}=") else line
-        for line in lines
-    ) + "\n",
-    encoding="utf-8",
-)
-PY
+                python3 -c 'import sys; from pathlib import Path; key,value=sys.argv[1],sys.argv[2]; path=Path(".env"); lines=path.read_text(encoding="utf-8").splitlines(); path.write_text("\n".join((f"{key}={value}" if line.startswith(f"{key}=") else line) for line in lines) + "\n", encoding="utf-8")' "$key" "$value"
               else
                 printf '%s=%s\n' "$key" "$value" >> .env
               fi
